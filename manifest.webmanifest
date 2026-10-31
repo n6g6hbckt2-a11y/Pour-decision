@@ -1,0 +1,17 @@
+{
+  "name": "Pour Decision",
+  "short_name": "Pour Decision",
+  "description": "Learns each person's wine palate and picks what to try next.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2F0F3",
+  "theme_color": "#7B1E3A",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

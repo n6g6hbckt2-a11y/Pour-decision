@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pour Decision</title>
+<meta name="description" content="Learns each person's wine palate and picks what to try next.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7B1E3A">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pour Decision">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: phone-first single column; sticky tab bar (Palate, Rack, Food, Scan, Log); bottom sheets for rating notes and adding bottles */
+:root{
+  --bg:#F2F0F3; --surface:#FFFFFF; --sunk:#E7E3E9; --ink:#1D1720; --muted:#5F5763; --line:#D9D3DC;
+  --wine:#7B1E3A; --wine-soft:#F3E1E7; --explore:#1E6A64; --explore-soft:#DDEFEC; --warn:#8A4A0E; --warn-soft:#F6E7D6; --bad:#8A3B12;
+  --f-display:"Fraunces", Georgia, serif; --f-body:"Figtree", system-ui, sans-serif; --f-data:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141015; --surface:#1F1922; --sunk:#2A232D; --ink:#F1ECF2; --muted:#ABA1AF; --line:#3A3140;
+  --wine:#E58BA5; --wine-soft:#3A1E29; --explore:#74C7BD; --explore-soft:#173230; --warn:#F0B87A; --warn-soft:#3A2A18; --bad:#F0A07A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141015; --surface:#1F1922; --sunk:#2A232D; --ink:#F1ECF2; --muted:#ABA1AF; --line:#3A3140;
+  --wine:#E58BA5; --wine-soft:#3A1E29; --explore:#74C7BD; --explore-soft:#173230; --warn:#F0B87A; --warn-soft:#3A2A18; --bad:#F0A07A; color-scheme:dark}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+img{max-width:100%}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 64px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;margin:0;text-wrap:balance}
+h1{font-size:32px;line-height:1.05;letter-spacing:-0.01em}
+h2{font-size:22px} h3{font-size:18px}
+.lede{color:var(--muted);margin:4px 0 0;font-size:14px}
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+@media (max-width:360px){.tabs a{font-size:13px}}
+.tabs a{display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:12px;font-weight:600;font-size:14px;color:var(--ink);text-decoration:none;background:var(--surface)}
+.tabs a[aria-current="page"]{background:var(--ink);color:var(--bg)}
+.panel{display:flex;flex-direction:column;gap:24px}
+section{display:flex;flex-direction:column;gap:12px}
+.sec-head{display:flex;flex-direction:column;gap:2px}
+.sec-head p{margin:0;color:var(--muted);font-size:14px}
+.box{background:var(--surface);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font:600 14px var(--f-body);min-height:40px;padding:0 14px;border-radius:20px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+select,input[type=text],input[type=number],textarea{font:500 15px var(--f-body);color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px;max-width:100%;box-sizing:border-box}
+textarea{padding:10px;min-height:96px;width:100%;resize:vertical}
+.adv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--wine)}
+:where(a){color:var(--wine)}
+:focus-visible{outline:2.5px solid var(--wine);outline-offset:2px}
+.trait{display:grid;grid-template-columns:86px minmax(0,1fr) 64px;gap:10px;align-items:center}
+.trait b{font-size:14px;font-weight:600}
+.scale{display:flex;flex-direction:column;gap:3px}
+.track{position:relative;height:10px;border-radius:5px;background:var(--sunk)}
+.band{position:absolute;top:0;bottom:0;border-radius:5px;background:var(--wine-soft)}
+.dot{position:absolute;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--wine);border:2px solid var(--surface)}
+.dot.faint{background:var(--line)}
+.ends{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.state{font:600 11px var(--f-body);text-align:center;padding:4px 6px;border-radius:10px;background:var(--sunk);color:var(--muted)}
+.state.known{background:var(--wine-soft);color:var(--wine)}
+.state.leaning{background:var(--explore-soft);color:var(--explore)}
+.learned{border-top:1px solid var(--line);padding-top:12px;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.list{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surface);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.card.ex{box-shadow:inset 0 0 0 1.5px var(--explore)}
+.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px}
+.name{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--muted)}
+.fit{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.fit .n{font-family:var(--f-data);font-size:18px;font-variant-numeric:tabular-nums}
+.fit .c{font-size:11px;color:var(--muted)}
+.why{font-size:14px;margin:0}
+.q{font-size:14px;color:var(--explore);background:var(--explore-soft);border-radius:10px;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.q b{font-weight:700}
+.rate{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.rate button,.btn{font:600 13px var(--f-body);min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;padding:0 10px}
+.rate button{padding:0 4px}
+.rate button[aria-pressed="true"]{background:var(--wine);border-color:var(--wine);color:var(--surface)}
+.rate button[data-s="-2"][aria-pressed="true"]{background:var(--bad);border-color:var(--bad)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.tag{font:600 12px var(--f-body);padding:4px 10px;border-radius:12px;background:var(--wine-soft);color:var(--wine);white-space:nowrap}
+.tag.ex{background:var(--explore-soft);color:var(--explore)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.neg{background:var(--sunk);color:var(--bad)}
+.tag.plain{background:var(--sunk);color:var(--muted)}
+.empty{background:var(--sunk);border-radius:12px;padding:14px;font-size:14px;color:var(--muted)}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--surface);border-radius:12px;padding:12px 14px}
+.primary{font:700 15px var(--f-body);min-height:48px;border-radius:12px;border:none;background:var(--ink);color:var(--bg);cursor:pointer;padding:0 18px}
+.primary:disabled{opacity:.5}
+.status{font-size:13px;color:var(--muted);min-height:18px;margin:0}
+.foot{font-size:12px;color:var(--muted)}
+.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.sheet-bg{position:fixed;inset:0;background:rgba(10,6,12,.45);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--surface);border-radius:20px 20px 0 0;max-height:88vh;overflow-y:auto;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));box-shadow:0 -8px 30px rgba(0,0,0,.2)}
+.sheet-in{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.note-row{display:flex;flex-direction:column;gap:6px}
+.note-row .opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.note-row button{font:600 13px var(--f-body);min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.note-row button[aria-pressed="true"]{background:var(--explore);border-color:var(--explore);color:var(--surface)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.slider{display:grid;grid-template-columns:84px minmax(0,1fr) 20px;gap:8px;align-items:center;font-size:13px}
+.slider output{font-family:var(--f-data);text-align:right}
+.photo{display:flex;align-items:center;justify-content:center;min-height:56px;border:1.5px dashed var(--line);border-radius:12px;font-weight:600;cursor:pointer;text-align:center;padding:8px}
+.photo input{position:absolute;opacity:0;width:1px;height:1px}
+@media (prefers-reduced-motion: no-preference){.dot{transition:left .4s ease}.band{transition:left .4s ease,width .4s ease}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="wrap">
+  <header>
+    <h1>Pour Decision</h1>
+    <p class="lede">Learns each person's palate from every bottle, then picks what to try next, for one of you or both.</p>
+  </header>
+
+  <div class="box" style="padding:12px 14px;gap:10px">
+    <div class="row" style="justify-content:space-between">
+      <span class="label">Who's drinking?</span>
+      <button class="btn" type="button" id="namesBtn" aria-expanded="false" style="min-height:36px">Edit names</button>
+    </div>
+    <div class="row" id="whoChips" role="group" aria-label="Who's drinking"></div>
+    <p class="meta" id="namesHint" style="margin:0" hidden>Welcome. Add your names to start. If you drink alone, leave the second name as it is.</p>
+    <form id="namesForm" class="two" hidden>
+      <label class="field" for="n1">Person 1<input id="n1" type="text" maxlength="24"></label>
+      <label class="field" for="n2">Person 2<input id="n2" type="text" maxlength="24"></label>
+      <button class="primary" type="submit" style="grid-column:1/-1">Save names</button>
+    </form>
+  </div>
+
+  <nav class="tabs" aria-label="Sections">
+    <a href="#palate" data-tab="palate">Palate</a>
+    <a href="#rack" data-tab="rack">Rack</a>
+    <a href="#food" data-tab="food">Food</a>
+    <a href="#scan" data-tab="scan">Scan</a>
+    <a href="#log" data-tab="log">Log</a>
+    <a href="#more" data-tab="more">More</a>
+  </nav>
+
+  <!-- PALATE -->
+  <div class="panel" id="p-palate">
+    <section>
+      <div class="sec-head"><h2>Your palate</h2><p id="palateSub">Loading your ratings…</p></div>
+      <div class="row" id="ptypes" role="group" aria-label="Wine type"></div>
+      <div class="box" id="palate"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Try next</h2><p>Each bottle answers one open question about your taste. Rate it, and tell it what stood out.</p></div>
+      <div class="box filters"></div>
+      <div id="next" class="list"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Scout report</h2><p id="scoutSub">Each Friday new wines from the shops are added to the app for everyone. Your own picks above are worked out on this phone from your ratings.</p></div>
+      <div id="scout" class="list"><div class="empty">The first report arrives Friday 6 November.</div></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Reliable picks</h2><p>For nights you just want something you'll enjoy.</p></div>
+      <div id="safe" class="list"></div>
+    </section>
+  </div>
+
+  <!-- RACK -->
+  <div class="panel" id="p-rack" hidden>
+    <section>
+      <div class="sec-head"><h2>Your wine rack</h2><p id="rackSub">What you have at home, and when to drink it.</p></div>
+      <form class="box" id="shelfForm">
+        <span class="label">Add from photos</span>
+        <label class="photo" id="shelfWrap"><input id="shelfPhoto" type="file" accept="image/*" multiple><span id="shelfLabel">Photograph your rack or a few bottle labels</span></label>
+        <div class="row"><button class="primary" type="submit" id="shelfGo">Read my bottles</button><button class="btn" type="button" id="shelfStop" hidden>Stop</button></div>
+        <p class="status" id="shelfStatus" role="status">Labels facing the camera work best. You check every bottle before anything is added.</p>
+        <div id="shelfOut" class="list"></div>
+      </form>
+      <div id="rack" class="list"></div>
+      <button class="btn" type="button" data-open-add="rack">Add a bottle by hand</button>
+    </section>
+  </div>
+
+  <!-- FOOD -->
+  <div class="panel" id="p-food" hidden>
+    <section>
+      <div class="sec-head"><h2>What are you eating?</h2><p>It looks in your rack first, then the shops.</p></div>
+      <form class="box" id="foodForm">
+        <label class="field" for="foodIn">Dish
+          <input id="foodIn" type="text" maxlength="80" placeholder="e.g. lamb tagine" autocomplete="off"></label>
+        <div class="row" id="foodChips"></div>
+        <button class="primary" type="submit">Find a wine</button>
+      </form>
+      <div id="foodOut" class="list"></div>
+    </section>
+  </div>
+
+  <!-- SCAN -->
+  <div class="panel" id="p-scan" hidden>
+    <section>
+      <div class="sec-head"><h2>Scan a wine list</h2><p>A restaurant list, a shop shelf or a web page. You get the best pick for your palate, and how the price compares with what the wine usually costs.</p></div>
+      <form class="box" id="scanForm">
+        <label class="photo" id="photoWrap" hidden><input id="scanPhoto" type="file" accept="image/*" capture="environment"><span id="photoLabel">Take or choose a photo of the list</span></label>
+        <label class="field" for="scanFood">What are you eating? (optional)<input id="scanFood" type="text" maxlength="80" placeholder="e.g. sea bass" autocomplete="off"></label>
+        <label class="field" for="scanText"><span id="scanTextLabel">Or paste the list</span>
+          <textarea id="scanText" maxlength="12000" placeholder="Paste wine names and prices"></textarea></label>
+        <div class="row">
+          <button class="primary" type="submit" id="scanGo">Find my best pick</button>
+          <button class="btn" type="button" id="scanStop" hidden>Stop</button>
+        </div>
+        <p class="status" id="scanStatus" role="status"></p>
+      </form>
+      <div id="scanOut" class="list"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Add a shop's shelf</h2><p>Photograph the wine aisle bay by bay, with price labels in view. Every red it reads is added to that shop's list, so the app knows what your local store actually stocks.</p></div>
+      <form class="box" id="aisleForm">
+        <label class="field" for="aisleShop">Which shop?<select id="aisleShop"></select></label>
+        <label class="photo" id="aisleWrap"><input id="aislePhoto" type="file" accept="image/*" multiple><span id="aisleLabel">Choose shelf photos (as many as you like)</span></label>
+        <div class="row"><button class="primary" type="submit" id="aisleGo">Read the shelves</button><button class="btn" type="button" id="aisleStop" hidden>Stop</button></div>
+        <p class="status" id="aisleStatus" role="status">You check every bottle before anything is added.</p>
+        <div id="aisleOut" class="list"></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel" id="p-log" hidden>
+    <section>
+      <div class="sec-head"><h2>Tasting log</h2><p id="logSub">Every bottle you've rated. Tap one to change the rating or your notes.</p></div>
+      <div id="log" class="list"></div>
+      <button class="primary" type="button" data-open-add="log">Log a bottle you've tried</button>
+    </section>
+  </div>
+
+  <!-- MORE -->
+  <div class="panel" id="p-more" hidden>
+    <section>
+      <div class="sec-head"><h2>Claude features</h2><p>Photo scanning (racks, shelves and wine lists) and pairing unusual dishes use Claude. Add your own Anthropic API key to turn them on. Each scan costs a few pence, billed by Anthropic to you.</p></div>
+      <form class="box" id="keyForm">
+        <p class="status" id="keyState" style="margin:0"></p>
+        <label class="field" for="keyIn">Anthropic API key<input id="keyIn" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…"></label>
+        <div class="row"><button class="primary" type="submit">Save key</button><button class="btn" type="button" id="keyClear" hidden>Remove key</button></div>
+        <p class="status" id="keyMsg" role="status"></p>
+        <p class="meta" style="margin:0">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> (add a little credit first). The key is stored only on this phone and sent only to Anthropic.</p>
+      </form>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Backup</h2><p>Your ratings, notes and rack live on this phone. Save a backup now and then, and restore it on a new phone.</p></div>
+      <div class="box">
+        <div class="row"><button class="primary" type="button" id="backupBtn">Save a backup file</button>
+          <label class="btn" for="restoreIn" style="display:inline-flex;align-items:center">Restore from a file<input id="restoreIn" type="file" accept="application/json,.json" style="position:absolute;opacity:0;width:1px;height:1px"></label></div>
+        <p class="status" id="backupMsg" role="status"></p>
+      </div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Install on your phone</h2></div>
+      <div class="box">
+        <p class="why"><strong>iPhone:</strong> open this page in Safari, tap the Share button, then <strong>Add to Home Screen</strong>.</p>
+        <p class="why"><strong>Android:</strong> open it in Chrome, tap the ⋮ menu, then <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+        <p class="meta" style="margin:0">The app updates itself whenever it's opened with a signal. It works offline in the shop too.</p>
+      </div>
+    </section>
+  </div>
+
+  <p class="foot">Style scores are estimates from published tasting notes, and drinking windows marked "est." are rules of thumb until the scout researches them. Prices as listed by each shop in October 2026; ranges and vintages change.</p>
+</div>
+
+<!-- Rating + notes sheet -->
+<div class="sheet-bg" id="noteBg" hidden></div>
+<div class="sheet" id="noteSheet" role="dialog" aria-modal="true" aria-labelledby="noteTitle" hidden>
+  <div class="sheet-in">
+    <h3 id="noteTitle">How was it?</h3>
+    <div id="noteRate"></div>
+    <p class="meta" style="margin:0">What stood out? Optional, but this is what teaches it fastest.</p>
+    <div id="noteRows" class="list"></div>
+    <div class="row"><button class="primary" type="button" id="noteSave">Save</button><button class="btn" type="button" id="noteSkip">Close</button></div>
+  </div>
+</div>
+
+<!-- Add bottle sheet -->
+<div class="sheet-bg" id="addBg" hidden></div>
+<div class="sheet" id="addSheet" role="dialog" aria-modal="true" aria-labelledby="addTitle" hidden>
+  <form class="sheet-in" id="addForm">
+    <h3 id="addTitle">Add a bottle</h3>
+    <label class="field" for="fName">Wine<input id="fName" type="text" required maxlength="100" placeholder="e.g. Tesco Finest Appassimento" list="wineNames" autocomplete="off"></label>
+    <datalist id="wineNames"></datalist>
+    <label class="field" for="fType">Type<select id="fType"><option value="red">Red</option><option value="white">White</option><option value="rose">Rosé</option><option value="sparkling">Sparkling</option></select></label>
+    <div class="two">
+      <label class="field" for="fShop">Where from<select id="fShop"></select></label>
+      <label class="field" for="fPrice">Price (£)<input id="fPrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+    </div>
+    <div class="two">
+      <label class="field" for="fVintage">Vintage<input id="fVintage" type="number" min="1950" max="2030" inputmode="numeric" placeholder="e.g. 2022"></label>
+      <label class="field" for="fQty">Bottles you have<input id="fQty" type="number" min="0" max="120" value="0" inputmode="numeric"></label>
+    </div>
+    <label class="field" for="fWho">Whose rating?<select id="fWho"></select></label>
+    <label class="field" for="fRate">Tasted it?
+      <select id="fRate"><option value="">Not yet</option><option value="2">Loved it</option><option value="1">Liked it</option><option value="0">Meh</option><option value="-2">Not again</option></select></label>
+    <div id="styleWrap" class="list">
+      <span class="label">Style, if you know it</span>
+      <div id="fSliders" class="list"></div>
+    </div>
+    <div class="row"><button class="primary" type="submit">Save</button><button class="btn" type="button" id="addCancel">Cancel</button></div>
+    <p class="status" id="addStatus" role="status"></p>
+  </form>
+</div>
+
+<script>
+const NOW=new Date().getFullYear();
+const SHOPS=['Lidl','Aldi','Tesco',"Sainsbury's",'Wine Society'];
+const DIMS=[
+ {k:'Body',lo:'Light',hi:'Full',up:'fuller-bodied',down:'lighter',notes:['Too heavy','Just right','Too light']},
+ {k:'Fruit',lo:'Savoury',hi:'Jammy',up:'jammier',down:'more savoury',notes:['Too jammy','Just right','Not fruity enough']},
+ {k:'Oak',lo:'Unoaked',hi:'Vanilla oak',up:'oakier',down:'less oaky',notes:['Too oaky','Just right','Wanted more oak']},
+ {k:'Tannin',lo:'Silky',hi:'Grippy',up:'grippier',down:'silkier',notes:['Too grippy','Just right','Too thin']},
+ {k:'Freshness',lo:'Soft',hi:'Crisp',up:'fresher',down:'softer',notes:['Too sharp','Just right','Too flat']},
+ {k:'Ripeness',lo:'Dry',hi:'Sweet-ripe',up:'riper',down:'drier',notes:['Too sweet','Just right','Too dry']}];
+const W=(id,name,shop,price,region,a,note)=>({id,name,shop,price,region,a,note});
+const CAT=[
+ W('mucho-mas','Mucho Más Tinto','Other',null,'Spain',[4,5,4,2,1,3],'Plush Tempranillo-Syrah blend with vanilla.'),
+ W('sanmarzano-60','San Marzano Sessantanni Primitivo di Manduria','Other',null,'Puglia',[5,5,4,3,2,4],'Old-vine Primitivo: dense, ripe and oaky.'),
+ W('l-passamano','Passamano Frappato Syrah 2024','Lidl',7.5,'Sicily',[3,4,2,2,3,3],'Partly dried grapes: strawberry and plum.'),
+ W('l-negroamaro','Cuor di Pietra Salice Salentino Riserva 2021','Lidl',7.49,'Puglia',[4,3,4,3,2,2],'Full and oaky, smoky dark fruit.'),
+ W('l-uvanis','Hacienda Uvanis Garnacha Old Vines 2024','Lidl',8.49,'Spain',[4,4,2,2,2,2],'Raspberry, kirsch, liquorice, a little smoke.'),
+ W('l-debortoli','De Bortoli Shiraz Durif 2025','Lidl',7.99,'Australia',[5,4,3,3,2,2],'Spicy dark fruit and dark chocolate.'),
+ W('l-5oros','5 Oros Rioja Crianza 2021','Lidl',8,'Rioja',[3,3,4,3,3,1],'Traditional crianza, wild strawberry core.'),
+ W('l-amarone','Amarone della Valpolicella Classico','Lidl',16.99,'Veneto',[5,4,3,3,2,3],'Dried cherry, fig and cocoa. Velvety.'),
+ W('l-pinot','Alte Vogtei Pinot Noir 2025','Lidl',11.99,'Baden',[2,2,2,1,4,1],'Elegant, red cherry and earth.'),
+ W('l-coonawarra','Deluxe Coonawarra Cabernet 2025','Lidl',7.29,'Australia',[4,3,3,4,3,1],'Blackcurrant, mint, cedar. Firm.'),
+ W('l-carmenere','Deluxe Carménère Gran Reserva 2022','Lidl',7.99,'Chile',[4,4,3,3,2,1],'Ripe plum, peppercorn, gentle spice.'),
+ W('l-almocreve','Alentejano Almocreve 2023','Lidl',7.49,'Portugal',[4,4,2,2,2,1],'Dark fruit and herbs, low tannin.'),
+ W('a-terre','Terre des Poètes Vaucluse 2025','Aldi',8.99,'Rhône',[3,3,1,2,3,1],'Grenache-Syrah with cracked pepper and herbs.'),
+ W('a-cesar','César Bordeaux 2024','Aldi',8.99,'Bordeaux',[3,3,2,3,4,1],'Mid-weight claret: plum, cassis, fresh.'),
+ W('a-troismanoirs','Château Les Trois Manoirs Médoc 2022','Aldi',8.99,'Bordeaux',[4,2,3,4,3,1],'Traditional Cabernet-led claret, savoury tannins.'),
+ W('a-cdr','Chassaux et Fils Côtes du Rhône 2024','Aldi',5.49,'Rhône',[3,3,1,2,3,1],'Juicy damson and peppery spice.'),
+ W('a-animus','Vicente Faria Animus Reserva Douro 2023','Aldi',null,'Douro',[5,4,3,3,3,2],'Big, bold, chocolatey bramble fruit.'),
+ W('a-baron','Baron Amarillo Rioja Reserva 2020','Aldi',null,'Rioja',[3,3,4,2,3,1],'Smooth, well-integrated oak, red fruit.'),
+ W('a-estevez','Estevez Merlot NV','Aldi',4.69,'Chile',[2,4,1,1,3,2],'Juicy red plum, light tannin.'),
+ W('t-allgood','All Good Things Shiraz 2024','Tesco',10,'',[5,4,3,3,2,2],'Deep blackberry, plum and dark spice.'),
+ W('t-peumo','Tesco Finest Peumo Carménère 2023','Tesco',9,'Chile',[4,4,4,2,2,2],'Soft and round, smoky oak over plum.'),
+ W('t-hyot','Château Hyot Castillon 2022','Tesco',9.5,'Bordeaux',[4,4,3,3,3,1],'Plush plum, black cherry and mocha.'),
+ W('t-vdc-res','Tesco Finest Viña del Cura Rioja Reserva 2021','Tesco',10.75,'Rioja',[4,3,4,3,3,1],'Blackberry, liquorice, cedar and clove.'),
+ W('t-vdc-gr','Tesco Finest Viña del Cura Rioja Gran Reserva 2018','Tesco',15.25,'Rioja',[3,2,4,3,3,1],'Aged: dried red fruit, leather, sweet spice.'),
+ W('t-kadette','Kanonkop Kadette Cape Blend 2024','Tesco',13.75,'South Africa',[4,3,3,4,3,1],'Structured: plum, spice and cocoa.'),
+ W('t-mencia','Maruxa Mencía Valdeorras 2024','Tesco',12.5,'Galicia',[2,3,1,2,4,1],'Dry and floral, raspberry. Serve cool.'),
+ W('t-treadsoftly','Tread Softly Pinot Noir 2025','Tesco',9,'',[2,3,1,1,4,1],'Light and lower-alcohol, red cherry.'),
+ W('t-wrattonbully','Tesco Finest Wrattonbully Cabernet 2024','Tesco',12,'Australia',[4,3,3,4,3,1],'Cassis, herbs and cedar.'),
+ W('t-bin8','Penfolds Bin 8 Shiraz Cabernet 2024','Tesco',25,'Australia',[5,4,4,4,3,1],'Concentrated, with eucalyptus lift.'),
+ W('s-garnacha',"Sainsbury's Taste the Difference Old Vine Garnacha Syrah","Sainsbury's",null,'Aragón',[4,4,3,2,2,2],'Wild strawberry, warm spice, smooth oak.'),
+ W('s-malbec',"Sainsbury's TTD High Altitude Malbec 2023","Sainsbury's",13.75,'Mendoza',[4,4,3,3,3,1],'Malbec from cooler, higher plots.'),
+ W('s-rheinhessen',"Sainsbury's TTD Rheinhessen Pinot Noir 2024","Sainsbury's",9,'Germany',[2,4,1,1,3,2],'Easygoing, fruity Pinot.'),
+ W('s-beaujolais',"Sainsbury's TTD Beaujolais Supérieur 2023","Sainsbury's",12.5,'Beaujolais',[2,3,1,1,4,1],'Light, bright, chillable.'),
+ W('s-brouilly',"Château de Pierreux Brouilly","Sainsbury's",null,'Beaujolais',[3,4,1,1,3,1],'Richer cru Beaujolais: plum and cherry.'),
+ W('w-monastrell',"The Society's Spanish Monastrell 2024",'Wine Society',7.95,'Jumilla',[4,5,1,3,2,2],'Sun-drenched and fruit-forward.'),
+ W('w-papaluna','Papa Luna Garnacha-Syrah-Mazuelo 2022','Wine Society',11.5,'Calatayud',[5,5,2,3,2,2],'Intense ripe fruit from old vines.'),
+ W('w-navajas','Navajas Crianza 2020','Wine Society',11.5,'Rioja',[3,3,5,3,3,1],'Smooth, creamy vanilla oak.'),
+ W('w-lopez','López de Haro Garnacha 2022','Wine Society',11.95,'Rioja',[4,4,3,2,2,2],'Creamy and rich.'),
+ W('w-threebunches','Three Bunches Shiraz 2024','Wine Society',8.95,'Australia',[5,5,2,3,2,2],'Full-bodied, fruity Shiraz.'),
+ W('w-chocblock','Boekenhoutskloof The Chocolate Block 2023','Wine Society',21.5,'Swartland',[5,4,4,3,2,2],'Syrah-based cult blend.'),
+ W('w-cruz','Cruz de Piedra Garnacha 2024','Wine Society',9.25,'Calatayud',[3,4,1,2,3,1],'Floral, fresh, plump fruit.'),
+ W('w-mayor','Viña Mayor Roble 2024','Wine Society',12.5,'Ribera del Duero',[3,4,2,3,3,1],'Lively, berry-fresh.'),
+ W('w-sanmartin','Finca San Martín Crianza 2022','Wine Society',12.5,'Rioja',[3,2,3,3,4,1],'Restrained and refined.'),
+ W('w-dirttrack','Dirt Track Shiraz 2024','Wine Society',8.95,'Swartland',[4,4,2,3,3,1],'Spicy, plum and blackberry.'),
+ W('w-rafa','Rafa Cambra Monastrell-Garnacha 2025','Wine Society',9.95,'Valencia',[3,4,1,2,3,1],'Juicy and peppery.'),
+ W('w-glorioso','Glorioso Reserva 2021','Wine Society',14.95,'Rioja',[4,3,4,3,3,1],'Reserva Rioja, good with lamb.'),
+ W('w-sabina','Sabina Tempranillo 2025','Wine Society',7.95,'Navarra',[2,3,1,2,3,1],'Easy-drinking and light.')
+];
+const RATES=[[2,'Loved'],[1,'Liked'],[0,'Meh'],[-2,'Not again']];
+/* Food rules: types in order of preference; t = ideal style [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (null = doesn't matter).
+   Checked top to bottom, so specific dishes come before general ones. */
+const FOODS=[
+ {k:['oyster','mussel','clam','scallop','crab','lobster','shellfish','prawn','shrimp','langoustine','seafood','fish and chips','fish & chips','scampi','calamari','squid'],types:['white','sparkling'],t:[2,2,1,1,5,1],tip:'Shellfish and fried seafood want a light, bone-dry, salty-fresh white or fizz: Muscadet, Picpoul, Albariño, Champagne.'},
+ {k:['sushi','sashimi','ceviche'],types:['white','sparkling'],t:[2,3,1,1,5,1],tip:'Raw fish needs crisp, delicate whites with no oak.'},
+ {k:['fish pie','creamy','carbonara','alfredo','cream sauce','cheese sauce'],types:['white','red'],t:[4,3,3,1,3,1],tip:'Cream sauces suit a rounder white with some oak, like Chardonnay or white Rioja.'},
+ {k:['salmon','trout','tuna','mackerel','swordfish'],types:['white','rose','red'],t:[3,3,2,1,4,1],tip:'Oily fish suits a richer white such as Chardonnay or white Rioja, a dry rosé, or a light chilled red like Pinot Noir.'},
+ {k:['cod','haddock','hake','sea bass','seabass','plaice','sole','halibut','monkfish','bream','fish'],types:['white','sparkling'],t:[2,3,1,1,5,1],tip:'White fish wants a fresh, unoaked white: Sauvignon Blanc, Albariño, Picpoul, Chablis.'},
+ {k:['salad','goats cheese','goat cheese','asparagus','pesto'],types:['white','rose'],t:[2,3,1,1,5,1],tip:'Green, tangy dishes need a zesty white like Sauvignon Blanc.'},
+ {k:['thai','vietnamese','sweet and sour','teriyaki','stir fry','chinese'],types:['white','rose','red'],t:[3,4,1,1,3,3],tip:'Sweet-spicy Asian food loves an aromatic, slightly off-dry white like Riesling or Gewürztraminer.'},
+ {k:['curry','spicy','chilli','chili','indian','jerk','mexican','tacos'],types:['white','rose','red'],t:[3,4,1,1,3,3],tip:'Heat makes tannin and oak taste harsh: go aromatic and off-dry, or a soft, fruity unoaked red.'},
+ {k:['paella','tapas','chorizo'],types:['rose','white','red'],t:[3,4,1,2,4,1],tip:'Spanish dishes suit a dry rosado, white Rioja or a juicy young red.'},
+ {k:['roast chicken','chicken','turkey'],types:['white','red','rose'],t:[3,3,2,1,4,1],tip:'Chicken works with a rounded white like Chardonnay, or a light, low-tannin red.'},
+ {k:['pork','gammon','ham'],types:['white','red','rose'],t:[3,3,2,2,4,1],tip:'Pork suits Chenin, Viognier or a juicy medium-bodied red.'},
+ {k:['lamb'],types:['red'],t:[4.5,3.5,3,4,3,null],tip:'Lamb wants tannin and dark fruit to cut its richness.'},
+ {k:['steak','beef','burger','brisket','ribeye'],types:['red'],t:[4.5,4,3,4,3,null],tip:'Red meat softens tannin, so a bold, structured red shines.'},
+ {k:['bbq','barbecue','ribs','pulled pork','smoked'],types:['red','rose'],t:[4.5,5,3,3,2,3],tip:'Sweet, smoky sauces need ripe, jammy fruit.'},
+ {k:['pizza','pasta','bolognese','lasagne','lasagna','tomato','italian'],types:['red'],t:[3,3.5,2,2.5,4,null],tip:'Tomato is acidic, so the wine needs freshness to match it.'},
+ {k:['sausage'],types:['red'],t:[3,3.5,2,2.5,3.5,null],tip:'Juicy, medium-bodied reds suit sausages.'},
+ {k:['duck'],types:['red'],t:[3,4,2,2,3.5,null],tip:'Duck loves fruit and freshness, such as Pinot Noir.'},
+ {k:['stew','casserole','pie','shepherd','cottage','goulash','chilli con carne'],types:['red'],t:[4,3.5,3,3,3,null],tip:'Hearty dishes match warm, generous reds.'},
+ {k:['mushroom','risotto','truffle'],types:['red','white'],t:[3,2.5,2,2,3.5,1],tip:'Earthy food suits savoury reds, or a textured white for creamy risotto.'},
+ {k:['venison','game','pheasant','pigeon'],types:['red'],t:[4,3,3,3,3.5,1],tip:'Game likes savoury depth and freshness.'},
+ {k:['blue cheese','stilton'],types:['white','red'],t:[4,5,1,1,2,5],tip:'Salty blue cheese loves a sweet wine.'},
+ {k:['cheese','cheddar','cheeseboard','cheese board'],types:['red','white'],t:[4,4,3,3,3,2],tip:'Hard cheese likes a full, fruity red. Soft cheese prefers a crisp white.'},
+ {k:['chocolate','brownie'],types:['red','white'],t:[4,5,2,2,2,5],tip:'Chocolate needs a wine at least as ripe and sweet as it is.'},
+ {k:['dessert','pudding','tart','cake','fruit'],types:['white','sparkling'],t:[3,5,1,1,3,5],tip:'The wine must be sweeter than the pudding: Moscato or a dessert wine.'},
+ {k:['canape','canapes','nibbles','crisps','aperitif','starter'],types:['sparkling','white','rose'],t:[2,3,1,1,5,1],tip:'Fizz is the most food-friendly start to a meal.'},
+ {k:['vegetable','veggie','lentil','bean','roast veg','vegetarian'],types:['red','white'],t:[3,3.5,2,2,3,null],tip:'Medium-bodied, fruity wines fit most vegetable dishes.'}
+];
+const TYPES={red:'Red',white:'White',rose:'Rosé',sparkling:'Sparkling'};
+const typeOf=w=>w?.type||'red';
+let RB={p1:{},p2:{}}, people=[{id:'p1',name:'Me'},{id:'p2',name:'Partner'}], custom={}, rack={}, scout=null, db=null, sample=null, imgOK=false, loaded=false, tab='palate';
+/* people: ratings are kept per person. Person 1's ratings keep the original doc ids (= wine id); person 2's are "p2--<wine id>". */
+const PIDS=['p1','p2'];
+const who=()=>['p1','p2','both'].includes(prefs.who)?prefs.who:'p1';
+const active=()=>who()==='both'?PIDS:[who()];
+const pname=pid=>people.find(p=>p.id===pid)?.name||(pid==='p1'?'Person 1':'Person 2');
+const R=pid=>RB[pid]||(RB[pid]={});
+const rdoc=(pid,wid)=>pid==='p1'?wid:pid+'--'+wid;
+const ratedByAny=wid=>active().some(p=>R(p)[wid]);
+let prefs={shop:'all',budget:999,adv:50};
+try{Object.assign(prefs,JSON.parse(localStorage.getItem('pd-prefs')||'{}'))}catch(e){}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const allWines=()=>CAT.filter(w=>!custom[w.id]).concat(Object.values(custom));
+const byId=id=>custom[id]||CAT.find(w=>w.id===id);
+const gbp=p=>p!=null&&p!==''&&!isNaN(p)?'£'+Number(p).toFixed(2):'';
+const yearOf=s=>{const m=String(s||'').match(/\b(19[5-9]\d|20[0-3]\d)\b/);return m?Number(m[1]):null};
+const shopOk=w=>prefs.shop==='all'||w.shop===prefs.shop;
+const budgetOk=w=>w.price==null||w.price===''||Number(w.price)<=prefs.budget;
+
+/* ---------- palate model: one palate per wine type ---------- */
+const LAB={
+  white:{Body:['Light','Full'],Fruit:['Citrus, mineral','Ripe, tropical'],Oak:['Unoaked','Oaky, creamy'],Freshness:['Soft','Zesty'],Ripeness:['Bone dry','Sweet']},
+  rose:{Body:['Light','Full'],Fruit:['Delicate','Fruity'],Oak:['Unoaked','Oaked'],Freshness:['Soft','Zesty'],Ripeness:['Bone dry','Sweet']},
+  sparkling:{Body:['Light','Rich'],Fruit:['Citrus, apple','Fruity, peachy'],Oak:['Fresh','Toasty, brioche'],Freshness:['Soft','Crisp'],Ripeness:['Brut','Sweet']}};
+const UPDOWN={Fruit:['fruitier','more citrusy'],Oak:['richer, oakier','fresher, unoaked'],Freshness:['zestier','softer'],Ripeness:['sweeter','drier'],Body:['fuller','lighter']};
+/* the dimensions that apply to a type, with that type's labels; i = index into w.a */
+function dimsFor(t){return DIMS.map((D,i)=>({...D,i})).filter(D=>t==='red'||(D.k!=='Tannin'&&!(t==='rose'&&D.k==='Oak'))).map(D=>{
+  if(t==='red')return D;const l=LAB[t][D.k],u=UPDOWN[D.k];
+  return {...D,lo:l[0],hi:l[1],up:u[0],down:u[1],notes:D.k==='Ripeness'?['Too sweet','Just right','Too dry']:D.k==='Oak'&&t==='sparkling'?['Too toasty','Just right','Wanted more toast']:D.notes}})}
+const TNOUN={red:'reds',white:'whites',rose:'rosés',sparkling:'sparkling wines'};
+function profile(t='red',pid='p1'){
+  const pts=DIMS.map(()=>[]);let n=0,notes=0;
+  for(const [id,r] of Object.entries(R(pid))){const w=byId(id);if(!w||typeOf(w)!==t)continue;n++;
+    const nt=r.notes||{};
+    dimsFor(t).forEach(D=>{const i=D.i,v=w.a[i];
+      if(r.score>0)pts[i].push({v,w:r.score});
+      const x=nt[D.k];if(x){notes++;
+        if(x==='less')pts[i].push({v:Math.max(1,v-1.2),w:1.5});
+        else if(x==='more')pts[i].push({v:Math.min(5,v+1.2),w:1.5});
+        else if(x==='right')pts[i].push({v,w:1.5});}});}
+  const dims=pts.map(p=>{const Wt=p.reduce((s,x)=>s+x.w,0);if(!Wt)return {ideal:3,W:0,sd:2,state:'unknown'};
+    const ideal=p.reduce((s,x)=>s+x.w*x.v,0)/Wt;const sd=Math.sqrt(p.reduce((s,x)=>s+x.w*(x.v-ideal)**2,0)/Wt);
+    const state=Wt>=4&&sd<=0.9?'known':Wt>=1.5?'leaning':'unknown';return {ideal,W:Wt,sd,state}});
+  return {type:t,pid,dims,n,notes};
+}
+const Pcache={};
+function getP(t,pid){pid=pid||(who()==='both'?'p1':who());const k=t+'|'+pid;return Pcache[k]||(Pcache[k]=profile(t,pid))}
+function clearP(){for(const k in Pcache)delete Pcache[k]}
+/* the score that drives recommendations: one person's, or for both, mostly the less keen person's so neither is let down */
+function fitFor(w){const t=typeOf(w);
+  if(who()!=='both')return {...predict(w,getP(t,who())),each:null};
+  const a=predict(w,getP(t,'p1')),b=predict(w,getP(t,'p2'));
+  return {pred:0.7*Math.min(a.pred,b.pred)+0.3*(a.pred+b.pred)/2,cov:Math.min(a.cov,b.cov),each:{p1:a.pred,p2:b.pred}}}
+function questionFor(w){if(who()!=='both')return question(w,getP(typeOf(w),who()));
+  const qa=question(w,getP(typeOf(w),'p1')),qb=question(w,getP(typeOf(w),'p2'));const q=qa.info>=qb.info?{...qa,pid:'p1'}:{...qb,pid:'p2'};
+  return {...q,dim:q.pid+q.dim,q:`For ${pname(q.pid)}: ${q.q}`}}
+function sim(a,b,t){let d=0;for(let i=0;i<6;i++){if(i===3&&t!=='red')continue;d+=(a[i]-b[i])**2}return Math.exp(-d/(2*1.7*1.7))}
+function predict(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let num=0,den=0;
+  for(const [id,r] of Object.entries(R(P.pid))){if(id===w.id)continue;const o=byId(id);if(!o||typeOf(o)!==t)continue;const k=sim(w.a,o.a,t);num+=r.score*k;den+=k}
+  const p=num/(den+0.35), cov=1-Math.exp(-den*1.2);
+  let cs=0,fs=0;dimsFor(t).forEach(D=>{const d=P.dims[D.i],c=Math.min(1,d.W/4);cs+=c;fs+=c*(1-Math.abs(w.a[D.i]-d.ideal)/1.5)});
+  const pred=cs>0?0.6*p+0.7*(fs/cs):p;return {pred,cov}}
+const fitPct=p=>Math.max(3,Math.min(97,Math.round(50+24*p)));
+const conf=c=>c>.75?'confident':c>.4?'fair guess':'rough guess';
+function question(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let best=-1,D=null;
+  dimsFor(t).forEach(X=>{const d=P.dims[X.i],u=1-Math.min(1,d.W/4);const g=u*(0.4+Math.min(2,Math.abs(w.a[X.i]-d.ideal)));if(g>best){best=g;D=X}});
+  const d=P.dims[D.i],up=w.a[D.i]>=d.ideal,noun=TNOUN[t];
+  const what=D.k==='Oak'&&t==='sparkling'?'toasty, aged fizz':D.k==='Ripeness'&&t!=='red'?'sweetness':D.k==='Oak'?'oak':D.k.toLowerCase();
+  const q=d.state==='unknown'?`How do you feel about ${what} in ${noun}?`:`Do you like ${up?D.up:D.down} ${noun} than your usual?`;
+  return {info:best,dim:D.i,q,ifLove:`I'll look for ${up?D.up:D.down} ${noun}`,ifNot:`I'll steer back towards what you already like`}}
+
+/* ---------- drinking windows ---------- */
+function windowFor(h){const w=byId(h.wineId)||{a:[3,3,3,3,3,1]};
+  if(h.drinkBy)return {from:h.drinkFrom||null,by:h.drinkBy,est:false,note:h.windowNote||''};
+  const [b,f,o,t,ac]=w.a;const keep=Math.max(1,Math.round((t+o+b-6)/2+(ac>=4?0.5:0)));
+  if(!h.vintage)return {from:null,by:NOW+1,est:true,note:'No vintage: drink within a year or so.'};
+  return {from:h.vintage+(keep>=4?2:0),by:h.vintage+2+keep,est:true,note:''}}
+function windowState(win){if(NOW>win.by)return {txt:'Drink now',cls:'warn',rank:0};
+  if(NOW===win.by)return {txt:'Drink this year',cls:'warn',rank:1};
+  if(win.from&&NOW<win.from)return {txt:`Keep until ${win.from}`,cls:'plain',rank:3};
+  return {txt:`Ready · best by ${win.by}`,cls:'',rank:2}}
+
+/* ---------- storage ---------- */
+function saveLocal(){try{localStorage.setItem('pd-local',JSON.stringify({RB,people,custom,rack}))}catch(e){}}
+async function put(col,id,data){if(db){try{await db.doc(col+'/'+id).set(data)}catch(e){flash('Could not save. Check your connection and try again.')}}else saveLocal()}
+async function del(col,id){if(db){try{await db.doc(col+'/'+id).delete()}catch(e){}}else saveLocal()}
+function flash(t){const s=$('addStatus');if(s)s.textContent=t}
+
+/* ---------- shared bits ---------- */
+function rateRow(id,pids){pids=pids||active();
+  return pids.map(pid=>{const cur=R(pid)[id]?.score;
+   return (pids.length>1?`<span class="label">${esc(pname(pid))}</span>`:'')+`<div class="rate" role="group" aria-label="${esc(pname(pid))}'s rating">`+RATES.map(([s,l])=>
+   `<button type="button" data-rate="${esc(id)}" data-p="${pid}" data-s="${s}" aria-pressed="${cur===s}">${l}</button>`).join('')+'</div>'}).join('')}
+function fitHTML(w,label){const f=fitFor(w);
+  return `<div class="fit"><span class="n">${fitPct(f.pred)}%</span><span class="c">${f.each?esc(`${pname('p1')} ${fitPct(f.each.p1)} · ${pname('p2')} ${fitPct(f.each.p2)}`):label||conf(f.cov)}</span></div>`}
+function card(w,P,opts={}){const inRack=Object.values(rack).some(h=>h.wineId===w.id);
+  return `<article class="card${opts.ex?' ex':''}"><div class="top"><div><div class="name">${esc(w.name)}</div>
+   <div class="meta">${esc([w.region,w.shop==='Other'?'':w.shop,gbp(w.price)||(w.shop==='Other'?'':'price: check shelf')].filter(Boolean).join(' · '))}</div></div>
+   ${fitHTML(w)}</div>
+   ${w.source==='scout'?`<span class="tag ${w.lane==='explore'?'ex':''}" style="align-self:flex-start">${(w.lane==='explore'?'Scout: explore':w.lane==='shared'?'Scout: for you both':'Scout: step up')+(w.forPerson&&w.forPerson!=='both'?' · for '+esc(pname(w.forPerson)):'')}</span>`:''}
+   ${w.note?`<p class="why">${esc(w.note)}</p>`:''}${opts.extra||''}${rateRow(w.id)}
+   <div class="actions"><button class="btn" type="button" data-rack-add="${esc(w.id)}">${inRack?'+1 in rack':'Add to rack'}</button></div></article>`}
+function filtersHTML(){return `<div class="row" role="group" aria-label="Shop">`+
+  [['all','All shops']].concat(SHOPS.map(s=>[s,s])).map(([v,l])=>`<button class="chip" type="button" data-shop="${esc(v)}" aria-pressed="${prefs.shop===v}">${esc(l)}</button>`).join('')+
+  `</div><div class="row"><span class="label">Spend up to</span><select class="budgetSel" aria-label="Spend up to">`+
+  [[999,'Any price'],[8,'£8'],[10,'£10'],[12,'£12'],[15,'£15'],[25,'£25']].map(([v,l])=>`<option value="${v}"${prefs.budget==v?' selected':''}>${l}</option>`).join('')+
+  `</select></div><div class="adv"><span>Stay close</span><input class="advSel" type="range" min="0" max="100" value="${prefs.adv}" aria-label="How far the next picks stretch from your usual"><span>Stretch me</span></div>`}
+
+/* ---------- render ---------- */
+function render(){clearP();const pt=TYPES[prefs.ptype]?prefs.ptype:'red';const P=getP(pt);
+  document.querySelectorAll('.filters').forEach(el=>{if(!el.contains(document.activeElement))el.innerHTML=filtersHTML()});
+  $('whoChips').innerHTML=PIDS.concat(['both']).map(p=>`<button class="chip" type="button" data-who="${p}" aria-pressed="${who()===p}">${esc(p==='both'?'Both of us':pname(p))}</button>`).join('');
+  $('ptypes').innerHTML=Object.keys(TYPES).map(t=>{const n=active().reduce((s,p)=>s+getP(t,p).n,0);return `<button class="chip" type="button" data-ptype="${t}" aria-pressed="${pt===t}">${TYPES[t]}${n?` · ${n}`:''}</button>`}).join('');
+  renderPalate(pt);renderNext(P);renderScout(P);renderRack(P);renderLog(P);
+  $('wineNames').innerHTML=allWines().map(w=>`<option value="${esc(w.name)}"></option>`).join('');
+}
+function palateMap(P,showName){const t=P.type,noun=TNOUN[t],nm=pname(P.pid),you=showName?nm:'You';
+  const head=showName?`<h3>${esc(nm)}</h3>`:'';
+  if(!P.n)return head+`<div class="empty">${esc(showName?nm+"'s":'Your')} ${TYPES[t].toLowerCase()} palate fills in as ${esc(showName?nm:'you')} rate${showName?'s':''} ${noun}. Rate one ${showName?'they know they like':'you know you like'}, or try the picks below.</div>`;
+  const known=[],open=[],DD=dimsFor(t);
+  DD.forEach(D=>{const d=P.dims[D.i];if(d.state==='unknown')open.push(D.k.toLowerCase());
+    else if(d.ideal>=3.7)known.push(D.hi.toLowerCase());else if(d.ideal<=2.3)known.push(D.lo.toLowerCase());
+    if(d.state==='leaning')open.push(D.k.toLowerCase())});
+  return head+DD.map(D=>{const i=D.i,d=P.dims[i],pos=(d.ideal-1)/4*100,sd=Math.max(d.sd,.3)/4*100;
+    const lab={known:'Known',leaning:'Leaning',unknown:'Unknown'}[d.state];
+    return `<div class="trait"><b>${D.k}</b><div class="scale"><div class="track" role="img" aria-label="${esc(nm)}, ${D.k}: ${d.state==='unknown'?'not known yet':d.ideal.toFixed(1)+' of 5, '+lab.toLowerCase()}">
+      ${d.state!=='unknown'?`<div class="band" style="left:${Math.max(0,pos-sd)}%;width:${Math.min(100,2*sd)}%"></div>`:''}
+      <div class="dot${d.state==='unknown'?' faint':''}" style="left:${pos}%"></div></div>
+      <div class="ends"><span>${D.lo}</span><span>${D.hi}</span></div></div><span class="state ${d.state}">${lab}</span></div>`}).join('')+
+   `<div class="learned"><div><strong>${esc(you)} like${showName?'s':''}:</strong> ${known.length?esc(known.join(', ')):'not clear yet'}</div>
+    <div><strong>Still testing:</strong> ${open.length?esc([...new Set(open)].join(', ')):'nothing major. Rate the scout picks to fine-tune.'}</div></div>`}
+function renderPalate(t){const Ps=active().map(p=>getP(t,p)),both=Ps.length>1;
+  const n=Ps.reduce((s,P)=>s+P.n,0),notes=Ps.reduce((s,P)=>s+P.notes,0);
+  $('palateSub').textContent=!loaded?'Loading your ratings…':both?`${TYPES[t]}: ${Ps.map(P=>`${pname(P.pid)} ${P.n} rated`).join(', ')}. Picks below suit you both.`
+    :n?`${pname(Ps[0].pid)}'s ${TYPES[t].toLowerCase()} palate, from ${n} rated bottle${n===1?'':'s'}${notes?` and ${notes} tasting note${notes===1?'':'s'}`:''}.`:`${pname(Ps[0].pid)} hasn't rated any ${TNOUN[t]} yet.`;
+  $('palate').innerHTML=Ps.map(P=>palateMap(P,both)).join('<hr style="border:none;border-top:1px solid var(--line);margin:4px 0">')}
+function pool(t){return allWines().filter(w=>typeOf(w)===t&&!ratedByAny(w.id)&&shopOk(w)&&budgetOk(w))}
+function renderNext(P){const a=prefs.adv/100;
+  const sc=pool(P.type).map(w=>{const {pred,cov}=fitFor(w);const q=questionFor(w);
+    return {w,pred,q,s:(0.6+a)*q.info+0.4*(1-cov)+(1.2-a)*pred}}).filter(x=>x.pred>-0.4-0.8*a).sort((x,y)=>y.s-x.s);
+  const near=(x,p)=>x.w.a.reduce((s,v,i)=>s+Math.abs(v-p.w.a[i]),0)<=2;
+  const pick=[],used=new Set();for(const x of sc){if(pick.length>=3)break;if(used.has(x.q.dim))continue;used.add(x.q.dim);pick.push(x)}
+  for(const x of sc){if(pick.length>=3)break;if(!pick.includes(x)&&!pick.some(p=>near(x,p)))pick.push(x)}
+  for(const x of sc){if(pick.length>=3)break;if(!pick.includes(x))pick.push(x)}
+  $('next').innerHTML=pick.length?pick.map(x=>card(x.w,P,{ex:true,extra:`<div class="q"><b>${esc(x.q.q)}</b><span>Love it: ${esc(x.q.ifLove)}. Not for you: ${esc(x.q.ifNot)}.</span></div>`})).join('')
+   :'<div class="empty">Nothing left to test under these filters. Try another shop or a higher budget.</div>';
+  const ids=new Set(pick.map(x=>x.w.id));
+  const safe=pool(P.type).filter(w=>!ids.has(w.id)).map(w=>({w,...fitFor(w)})).sort((x,y)=>y.pred-x.pred).slice(0,3);
+  $('safe').innerHTML=safe.length?safe.map(x=>card(x.w,P)).join(''):'<div class="empty">Nothing matches these filters.</div>'}
+function renderScout(P){if(!scout)return;
+  const picks=(Array.isArray(scout.picks)?scout.picks:[]).map(byId).filter(w=>w&&!ratedByAny(w.id));
+  $('scoutSub').textContent=scout.date?`Latest report: ${scout.date}`:'Latest report';
+  $('scout').innerHTML=(scout.summary?`<div class="box"><p class="why" style="white-space:pre-line">${esc(scout.summary)}</p></div>`:'')+
+   (picks.length?picks.map(w=>card(w,P,{ex:w.lane==='explore'})).join(''):'<div class="empty">You\'ve rated every pick from this report. New ones arrive next Friday.</div>')}
+function renderRack(P){
+  const items=Object.values(rack).filter(h=>h.qty>0).map(h=>{const w=byId(h.wineId);const win=windowFor(h);return {h,w,win,st:windowState(win)}})
+    .sort((x,y)=>x.st.rank-y.st.rank||x.win.by-y.win.by);
+  const n=items.reduce((s,x)=>s+x.h.qty,0);
+  $('rackSub').textContent=n?`${n} bottle${n===1?'':'s'}, most urgent first.`:'What you have at home, and when to drink it.';
+  $('rack').innerHTML=items.length?items.map(({h,w,win,st})=>`<article class="card"><div class="top"><div>
+     <div class="name">${esc(w?w.name:h.name)}${h.vintage&&!String(w?.name||'').includes(h.vintage)?' '+h.vintage:''}</div>
+     <div class="meta">${esc([w?.shop&&w.shop!=='Other'?w.shop:'',w?gbp(w.price):''].filter(Boolean).join(' · '))}</div></div>
+     <div class="fit"><span class="n">×${h.qty}</span></div></div>
+     <div class="row"><span class="tag ${st.cls}">${esc(st.txt)}</span><span class="meta">${win.from?`Window ${win.from}–${win.by}`:`Best by ${win.by}`}${win.est?' (est.)':''}</span></div>
+     ${win.note?`<p class="why">${esc(win.note)}</p>`:''}
+     <div class="actions"><button class="btn" type="button" data-open="${esc(h.id)}">Open one</button><button class="btn" type="button" data-plus="${esc(h.id)}">+1</button></div></article>`).join('')
+   :'<div class="empty">Your rack is empty. Add the bottles you have at home, or tap "Add to rack" on any wine.</div>'}
+function renderLog(P){const pids=active(),both=pids.length>1;
+  const ids=[...new Set(pids.flatMap(p=>Object.keys(R(p))))].map(id=>({w:byId(id),at:Math.max(...pids.map(p=>R(p)[id]?.at||0))})).filter(x=>x.w).sort((x,y)=>y.at-x.at);
+  $('logSub').textContent=both?'Every bottle either of you has rated. Tap one to change ratings or notes.':`Every bottle ${pname(pids[0])} has rated. Tap one to change the rating or notes.`;
+  $('log').innerHTML=ids.length?ids.map(({w})=>{
+    const tags=pids.map(p=>{const r=R(p)[w.id];if(!r)return both?`<span class="tag plain">${esc(pname(p))}: –</span>`:'';const l=RATES.find(x=>x[0]===r.score)?.[1]||'';
+      return `<span class="tag${r.score<0?' neg':''}">${both?esc(pname(p))+': ':''}${l}</span>`}).join('');
+    const nn=pids.reduce((s,p)=>s+Object.keys(R(p)[w.id]?.notes||{}).length,0);
+    return `<button type="button" class="item" data-note="${esc(w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer">
+     <div><div class="name" style="font-size:15px">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.shop==='Other'?'':w.shop,gbp(w.price),nn?`${nn} note${nn===1?'':'s'}`:'no notes yet'].filter(Boolean).join(' · '))}</div></div>
+     <span class="row" style="gap:4px;justify-content:flex-end">${tags}</span></button>`}).join('')
+   :'<div class="empty">Nothing rated yet.</div>'}
+
+/* ---------- rating + notes sheet ---------- */
+/* sheet holds both people's notes; "notesFor" picks whose notes the buttons edit */
+let sheetWine=null, sheetNotes={}, notesFor='p1';
+function openNotes(id,pid){const w=byId(id);if(!w)return;sheetWine=id;
+  sheetNotes=Object.fromEntries(PIDS.map(p=>[p,Object.assign({},R(p)[id]?.notes||{})]));
+  notesFor=pid||active().find(p=>R(p)[id])||active()[0];
+  $('noteTitle').textContent=w.name;drawNotes();$('noteBg').hidden=false;$('noteSheet').hidden=false;$('noteSheet').querySelector('button')?.focus()}
+function drawNotes(){const pids=active();$('noteRate').innerHTML=rateRow(sheetWine,pids);
+  const sw=pids.length>1?`<div class="row" role="group" aria-label="Whose notes">${pids.map(p=>`<button class="chip" type="button" data-notesfor="${p}" aria-pressed="${notesFor===p}">${esc(pname(p))}'s notes</button>`).join('')}</div>`:'';
+  const nt=sheetNotes[notesFor]||{};
+  $('noteRows').innerHTML=sw+dimsFor(typeOf(byId(sheetWine))).map(D=>`<div class="note-row"><span class="label">${D.k}</span><div class="opts" role="group" aria-label="${D.k}">`+
+    ['less','right','more'].map((v,j)=>`<button type="button" data-nk="${D.k}" data-nv="${v}" aria-pressed="${nt[D.k]===v}">${D.notes[j]}</button>`).join('')+'</div></div>').join('')}
+function closeNotes(){$('noteBg').hidden=true;$('noteSheet').hidden=true;sheetWine=null}
+$('noteSave').addEventListener('click',()=>{const id=sheetWine;
+  if(id)for(const p of PIDS){const r=R(p)[id];if(r){R(p)[id]={...r,notes:sheetNotes[p]||{}};put('ratings',rdoc(p,id),R(p)[id])}}
+  closeNotes();render()});
+$('noteSkip').addEventListener('click',closeNotes);$('noteBg').addEventListener('click',closeNotes);
+
+function setRating(id,s,keepOpen,pid){pid=pid||active()[0];const rs=R(pid);
+  if(rs[id]?.score===s&&!keepOpen){delete rs[id];render();del('ratings',rdoc(pid,id));return}
+  rs[id]={...(rs[id]||{}),person:pid,wineId:id,score:s,at:Date.now()};render();put('ratings',rdoc(pid,id),rs[id]);
+  if(!keepOpen)openNotes(id,pid);else{notesFor=pid;drawNotes()}}
+
+/* ---------- rack actions ---------- */
+function rackAdd(wineId,qty=1,vintage){const w=byId(wineId);const ex=Object.values(rack).find(h=>h.wineId===wineId&&(!vintage||h.vintage===vintage));
+  if(ex){rack[ex.id]={...ex,qty:ex.qty+qty};put('rack',ex.id,rack[ex.id])}
+  else{const id='r-'+wineId.replace(/[^A-Za-z0-9_-]/g,'')+(vintage?'-'+vintage:'');
+    rack[id]={id,wineId,name:w?.name||'',vintage:vintage||yearOf(w?.name)||null,qty,addedAt:Date.now()};put('rack',id,rack[id])}
+  render()}
+function rackOpen(hid){const h=rack[hid];if(!h)return;const q=h.qty-1;
+  if(q<=0){delete rack[hid];del('rack',hid)}else{rack[hid]={...h,qty:q};put('rack',hid,rack[hid])}
+  render();openNotes(h.wineId)}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const r=e.target.closest('[data-rate]');if(r){const inSheet=!!r.closest('#noteSheet');setRating(r.dataset.rate,Number(r.dataset.s),inSheet,r.dataset.p);return}
+  const nf=e.target.closest('[data-notesfor]');if(nf){notesFor=nf.dataset.notesfor;drawNotes();return}
+  const nk=e.target.closest('[data-nk]');if(nk){const k=nk.dataset.nk,v=nk.dataset.nv,n=sheetNotes[notesFor]||(sheetNotes[notesFor]={});n[k]=n[k]===v?undefined:v;if(!n[k])delete n[k];drawNotes();return}
+  const wh=e.target.closest('[data-who]');if(wh){prefs.who=wh.dataset.who;storePrefs();render();if(sheetWine)drawNotes();return}
+  const pt=e.target.closest('[data-ptype]');if(pt){prefs.ptype=pt.dataset.ptype;storePrefs();render();return}
+  const s=e.target.closest('[data-shop]');if(s){prefs.shop=s.dataset.shop;storePrefs();render();return}
+  const ra=e.target.closest('[data-rack-add]');if(ra){rackAdd(ra.dataset.rackAdd);ra.textContent='Added';return}
+  const op=e.target.closest('[data-open]');if(op){rackOpen(op.dataset.open);return}
+  const pl=e.target.closest('[data-plus]');if(pl){const h=rack[pl.dataset.plus];if(h){rack[h.id]={...h,qty:h.qty+1};put('rack',h.id,rack[h.id]);render()}return}
+  const no=e.target.closest('[data-note]');if(no){openNotes(no.dataset.note);return}
+  const oa=e.target.closest('[data-open-add]');if(oa){openAdd(oa.dataset.openAdd);return}
+  const fc=e.target.closest('[data-food]');if(fc){$('foodIn').value=fc.dataset.food;pairFood(fc.dataset.food);return}
+  const sv=e.target.closest('[data-scan-save]');if(sv){saveScanned(Number(sv.dataset.scanSave),sv.dataset.mode);return}
+});
+document.addEventListener('change',e=>{if(e.target.classList.contains('budgetSel')){prefs.budget=Number(e.target.value);storePrefs();render()}});
+document.addEventListener('input',e=>{if(e.target.classList.contains('advSel')){prefs.adv=Number(e.target.value);storePrefs();renderNext(getP(TYPES[prefs.ptype]?prefs.ptype:'red'))}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotes();closeAdd()}});
+function storePrefs(){try{localStorage.setItem('pd-prefs',JSON.stringify(prefs))}catch(e){}}
+
+/* ---------- tabs ---------- */
+const TABS=['palate','rack','food','scan','log','more'];
+function showTab(){const h=location.hash.replace('#','');tab=TABS.includes(h)?h:'palate';
+  TABS.forEach(t=>{$('p-'+t).hidden=t!==tab;const a=document.querySelector(`[data-tab="${t}"]`);if(t===tab)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')})}
+window.addEventListener('hashchange',showTab);
+
+/* ---------- add bottle ---------- */
+$('fShop').innerHTML=SHOPS.concat(['Other']).map(s=>`<option>${esc(s)}</option>`).join('');
+$('fSliders').innerHTML=DIMS.map((D,i)=>`<label class="slider" for="fs${i}"><span>${D.k}</span>
+  <input id="fs${i}" type="range" min="1" max="5" step="1" value="3" aria-label="${D.k}, ${D.lo} to ${D.hi}"><output id="fo${i}">3</output></label>`).join('');
+DIMS.forEach((D,i)=>$('fs'+i).addEventListener('input',e=>$('fo'+i).textContent=e.target.value));
+let addMode='log';
+function openAdd(mode){addMode=mode;$('addForm').reset();
+  $('fWho').innerHTML=PIDS.map(p=>`<option value="${p}">${esc(pname(p))}</option>`).join('');$('fWho').value=who()==='both'?'p1':who();DIMS.forEach((D,i)=>$('fo'+i).textContent='3');$('addStatus').textContent='';
+  $('fQty').value=mode==='rack'?'1':'0';$('fRate').value=mode==='rack'?'':'1';$('addTitle').textContent=mode==='rack'?'Add bottles to your rack':'Log a bottle';
+  $('addBg').hidden=false;$('addSheet').hidden=false;$('fName').focus()}
+function closeAdd(){$('addBg').hidden=true;$('addSheet').hidden=true}
+$('addCancel').addEventListener('click',closeAdd);$('addBg').addEventListener('click',closeAdd);
+$('fName').addEventListener('change',()=>{const w=allWines().find(x=>x.name===$('fName').value);
+  if(w){$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';$('fType').value=typeOf(w);$('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;
+    w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});$('styleWrap').hidden=true}else $('styleWrap').hidden=false});
+$('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fName').value.trim();if(!name){$('addStatus').textContent='Add the wine\'s name first.';return}
+  let w=allWines().find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!w){const id='c-'+Date.now().toString(36);
+    w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?null:Number($('fPrice').value),region:'',a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:'',source:'you',addedAt:Date.now()};
+    custom[id]=w;put('wines',id,w)}
+  const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
+  if(qty>0)rackAdd(w.id,qty,vin);
+  closeAdd();$('styleWrap').hidden=false;
+  if(rate!==''){const pid=$('fWho').value||active()[0];R(pid)[w.id]={person:pid,wineId:w.id,score:Number(rate),at:Date.now()};put('ratings',rdoc(pid,w.id),R(pid)[w.id]);render();openNotes(w.id,pid)}
+  else if(who()==='both'&&qty===0){render();openNotes(w.id)}else render()});
+
+/* ---------- food pairing ---------- */
+$('foodChips').innerHTML=['Roast lamb','Steak','Curry','Pizza','Roast chicken','Fish & chips','Salmon','Mussels','Thai green curry','Cheese board'].map(f=>`<button class="chip" type="button" data-food="${f}">${f}</button>`).join('');
+$('foodForm').addEventListener('submit',e=>{e.preventDefault();const f=$('foodIn').value.trim();if(f)pairFood(f)});
+async function pairFood(food){const out=$('foodOut');const low=food.toLowerCase();
+  let rule=FOODS.find(F=>F.k.some(k=>low.includes(k)));
+  if(!rule&&sample){out.innerHTML='<div class="empty">Thinking about what suits this dish…</div>';
+    try{const r=await sample.json(`What wine suits this dish: "${food.slice(0,80)}"? Reply with only JSON: {"types":[wine types in order of how well they suit it, from "red","white","rose","sparkling"],"t":[Body,Fruit,Oak,Tannin,Freshness,Ripeness],"tip":"one short plain sentence naming the classic match and why"}. t is the ideal style of the FIRST type: each a number 1-5 (1 = light/savoury/unoaked/silky/soft/dry, 5 = full/jammy/oaky/grippy/crisp/sweet) or null if it doesn't matter.`,{modelTier:'quick',cache:{gcTime:86400000}});
+      const ty=(Array.isArray(r?.types)?r.types:[]).filter(x=>TYPES[x]);
+      if(Array.isArray(r?.t)&&r.t.length===6&&ty.length)rule={types:ty,t:r.t.map(x=>x==null?null:Math.max(1,Math.min(5,Number(x)))),tip:String(r.tip||'')}}catch(e){}}
+  if(!rule){out.innerHTML='<div class="empty">I don\'t know that dish yet. Try naming the main ingredient, like "beef", "fish" or "chicken".</div>';return}
+  const P=profile();
+  const typeBonus=w=>{const i=rule.types.indexOf(typeOf(w));return i<0?-9:[0.7,0.35,0.1,0][i]};
+  const score=w=>{let s=0,c=0;rule.t.forEach((t,i)=>{if(t==null)return;if(i===3&&typeOf(w)!=='red')return;c++;s+=1-Math.abs(w.a[i]-t)/2});
+    return (c?s/c:0)*1.4+typeBonus(w)+fitFor(w).pred*0.3};
+  const best=rule.types[0];
+  const home=Object.values(rack).filter(h=>h.qty>0).map(h=>({h,w:byId(h.wineId)})).filter(x=>x.w&&rule.types.includes(typeOf(x.w))).map(x=>({...x,s:score(x.w)})).sort((a,b)=>b.s-a.s).slice(0,2);
+  const owned=new Set(Object.values(rack).map(h=>h.wineId));
+  const cands=allWines().filter(w=>!owned.has(w.id)&&shopOk(w)&&budgetOk(w)&&rule.types.includes(typeOf(w))).map(w=>({w,s:score(w)})).sort((a,b)=>b.s-a.s);
+  const top=cands.filter(x=>typeOf(x.w)===best).slice(0,3);
+  const alt=rule.types.slice(1).map(ty=>cands.find(x=>typeOf(x.w)===ty)).filter(Boolean).slice(0,2);
+  const pairPct=s=>Math.max(5,Math.min(98,Math.round(s/2.1*100)));
+  const tl=w=>`<span class="tag ${typeOf(w)==='red'?'':'ex'}">${TYPES[typeOf(w)]}</span>`;
+  const shopCard=x=>`<div class="card"><div class="top"><div><div class="name">${esc(x.w.name)}</div><div class="meta">${esc([x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)||'price: check shelf'].filter(Boolean).join(' · '))}</div></div><div class="fit"><span class="n">${pairPct(x.s)}%</span><span class="c">pairing</span></div></div><div class="row">${tl(x.w)}</div>${x.w.note?`<p class="why">${esc(x.w.note)}</p>`:''}</div>`;
+  const others=rule.types.slice(1).map(t=>TYPES[t].toLowerCase());
+  out.innerHTML=`<div class="box"><p class="why"><strong>${esc(food)}:</strong> ${esc(rule.tip)}</p>
+     <p class="meta" style="margin:0">Best match: <strong>${TYPES[best]}</strong>${others.length?`. Also works: ${esc(others.join(', '))}.`:'.'}</p></div>
+   <h3>From your rack</h3>${home.length?home.map(x=>{const st=windowState(windowFor(x.h));return `<div class="card"><div class="top"><div><div class="name">${esc(x.w.name)}</div><div class="meta">×${x.h.qty} at home · ${esc(st.txt)}</div></div><div class="fit"><span class="n">${pairPct(x.s)}%</span><span class="c">pairing</span></div></div><div class="row">${tl(x.w)}</div><div class="actions"><button class="btn" type="button" data-open="${esc(x.h.id)}">Open one</button></div></div>`}).join('')
+     :`<div class="empty">Nothing suitable in your rack${Object.keys(rack).length?' for this dish':' yet'}.</div>`}
+   <h3>Best ${TYPES[best].toLowerCase()}s to buy</h3>${top.length?top.map(shopCard).join(''):'<div class="empty">None under these filters. Change the shop or budget on the Palate tab.</div>'}
+   ${alt.length?`<h3>Or try</h3>${alt.map(shopCard).join('')}`:''}`}
+
+/* ---------- scan a wine list ---------- */
+let scanCtl=null, scanned=[];
+$('scanPhoto').addEventListener('change',e=>{const f=e.target.files?.[0];$('photoLabel').textContent=f?`Photo ready: ${f.name}`:'Take or choose a photo of the list'});
+$('scanStop').addEventListener('click',()=>scanCtl?.abort());
+function palateText(pid){return Object.keys(TYPES).map(t=>{const P=getP(t,pid);if(!P.n)return `${TYPES[t]}: not known yet`;
+  return `${TYPES[t]}: `+dimsFor(t).map(D=>{const d=P.dims[D.i];return d.state==='unknown'?`${D.k} unknown`:`${D.k} ${d.ideal.toFixed(1)} (${d.state})`}).join(', ')}).join('\n')}
+$('scanForm').addEventListener('submit',async e=>{e.preventDefault();if(!sample){$('scanStatus').textContent='Scanning uses Claude. Add your Claude API key on the More tab to turn it on.';return}
+  const file=$('scanPhoto').files?.[0], text=$('scanText').value.trim();
+  if(!file&&!text){$('scanStatus').textContent='Add a photo or paste the list first.';return}
+  const tasteOf=pid=>{const e=Object.entries(R(pid));return `${pname(pid)}. Palate:\n${palateText(pid)}\nLoved: ${e.filter(([,r])=>r.score>0).map(([id])=>byId(id)?.name).filter(Boolean).slice(0,10).join('; ')||'none yet'}. Disliked: ${e.filter(([,r])=>r.score<=0).map(([id])=>byId(id)?.name).filter(Boolean).slice(0,10).join('; ')||'none yet'}.`};
+  const both=who()==='both';
+  const forWho=both?`${pname('p1')} and ${pname('p2')}, who are sharing one bottle and have different tastes`:pname(who());
+  const prompt=`You are helping ${forWho} choose a wine from a wine list (a restaurant list, a shop shelf or a web listing) shown ${file?'in the attached photo':''}${file&&text?' and ':''}${text?'in the text below':''}.
+Palates for each type of wine, on 1-5 scales (1 = light/savoury/unoaked/silky/soft/dry, 5 = full/jammy/oaky/grippy/crisp/sweet):
+${active().map(tasteOf).join('\n\n')}${both?'\nThe best pick is a bottle BOTH will enjoy; also name the best pick for each of them if they order by the glass.':''}${$('scanFood').value.trim()?`\nThe food: ${$('scanFood').value.trim().slice(0,80)}. Weigh the food pairing heavily (pick the right type of wine for the dish first, then the best fit for the taste within it) and mention it in "why".`:''}
+Read every wine on the list with its price: reds, whites, rosés and sparkling. For each wine give its "type" ("red","white","rose" or "sparkling") and estimate its style as six numbers [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (1-5), and its typical UK retail price per 75cl bottle if you know the wine or a close equivalent (null if unsure). Judge value: on a restaurant list compare against typical retail (UK restaurants usually charge 2.5-3.5x; lower markup is better value); on a shop list compare against its usual price.
+Reply with only JSON: {"kind":"restaurant" or "shop","summary":"1-2 plain sentences naming the best pick${both?' for both of them, the best for each by the glass,':''} and the best-value pick","wines":[{"name":"","type":"red","price":number or null,"unit":"bottle" or "glass","style":[6 numbers],"foodFit":number 0-1 or null if no dish was given,"retail":number or null,"value":"great"|"fair"|"poor"|"unknown","why":"one short plain sentence about fit and value"}]}. At most 15 wines. Never invent wines that aren't on the list.${text?'\n\nTHE LIST:\n'+text.slice(0,12000):''}`;
+  scanCtl=new AbortController();$('scanGo').disabled=true;$('scanStop').hidden=false;$('scanStatus').textContent='Reading the list… this can take up to a minute.';$('scanOut').innerHTML='';
+  try{const r=await sample.json(prompt,{signal:scanCtl.signal,images:file?[file]:undefined,cache:false});
+    const vb={great:0.6,fair:0.15,poor:-0.5,unknown:0};
+    scanned=(Array.isArray(r?.wines)?r.wines:[]).filter(x=>x&&x.name&&Array.isArray(x.style)&&x.style.length===6).map(x=>{
+      const a=x.style.map(v=>Math.max(1,Math.min(5,Math.round(Number(v)||3))));const type=TYPES[x.type]?x.type:'red';const f=fitFor({id:'_scan',a,type}),pred=f.pred,each=f.each;
+      const ff=x.foodFit==null||isNaN(x.foodFit)?0:(Number(x.foodFit)-0.5)*3;
+      return {...x,a,type,pred,each,score:pred+(vb[x.value]??0)+ff}}).sort((p,q)=>q.score-p.score);
+    $('scanStatus').textContent='';
+    $('scanOut').innerHTML=(r?.summary?`<div class="box"><p class="why">${esc(r.summary)}</p></div>`:'')+(scanned.length?scanned.map((x,i)=>{
+      const mk=x.price&&x.retail&&x.unit!=='glass'?(x.price/x.retail):null;
+      const vtag={great:['Great value',''],fair:['Fair price','plain'],poor:['Poor value','warn'],unknown:['Value unknown','plain']}[x.value]||['','plain'];
+      return `<article class="card"><div class="top"><div><div class="name">${i===0?'Top pick: ':''}${esc(x.name)}</div>
+        <div class="meta">${esc([x.price!=null?gbp(x.price)+(x.unit==='glass'?' a glass':''):'',x.retail?`usually ~${gbp(x.retail)} retail`:'',mk?`${mk.toFixed(1)}× markup`:''].filter(Boolean).join(' · '))}</div></div>
+        <div class="fit"><span class="n">${fitPct(x.pred)}%</span><span class="c">${x.each?esc(`${pname('p1')} ${fitPct(x.each.p1)} · ${pname('p2')} ${fitPct(x.each.p2)}`):getP(x.type).n?'your fit':'fit (still learning)'}</span></div></div>
+        <div class="row"><span class="tag ${x.type==='red'?'':'ex'}">${TYPES[x.type]}</span><span class="tag ${vtag[1]}">${vtag[0]}</span></div>${x.why?`<p class="why">${esc(x.why)}</p>`:''}
+        <div class="actions"><button class="btn" type="button" data-scan-save="${i}" data-mode="drink">I'm having this</button><button class="btn" type="button" data-scan-save="${i}" data-mode="rack">Bought it</button></div></article>`}).join('')
+      :'<div class="empty">I couldn\'t read any wines from that. Try a sharper photo, or paste the list.</div>')}
+  catch(err){$('scanStatus').textContent=err?.code==='cancelled'?'Stopped.':err?.code==='bad_key'?'Anthropic rejected your Claude key. Check it on the More tab.':err?.code==='rate_limited'?'Too many requests just now. Try again in a minute.':err?.code==='image_rejected'?'That photo couldn\'t be read. Try another.':'That didn\'t work. Try again, or paste the list instead.'}
+  finally{$('scanGo').disabled=false;$('scanStop').hidden=true;scanCtl=null}});
+function saveScanned(i,mode){const x=scanned[i];if(!x)return;let w=allWines().find(o=>o.name.toLowerCase()===String(x.name).toLowerCase());
+  if(!w){const id='c-'+Date.now().toString(36);w={id,name:String(x.name).slice(0,100),type:x.type,shop:'Other',price:x.unit==='glass'?null:(x.retail??x.price??null),region:'',a:x.a,note:String(x.why||'').slice(0,200),source:'scan',addedAt:Date.now()};custom[id]=w;put('wines',id,w)}
+  if(mode==='rack'){rackAdd(w.id,1,yearOf(x.name));location.hash='#rack'}else{render();openNotes(w.id)}}
+
+/* ---------- add cellar from photos ---------- */
+let shelfCtl=null, found=[], maxImgs=1;
+$('shelfPhoto').addEventListener('change',e=>{const n=e.target.files?.length||0;
+  $('shelfLabel').textContent=n?`${n} photo${n===1?'':'s'} ready${n>maxImgs?` (I'll read the first ${maxImgs})`:''}`:'Photograph your rack or a few bottle labels'});
+$('shelfStop').addEventListener('click',()=>shelfCtl?.abort());
+$('shelfForm').addEventListener('submit',async e=>{e.preventDefault();
+  if(!sample||!imgOK){$('shelfStatus').textContent='Reading photos uses Claude. Add your Claude API key on the More tab, or add bottles by hand.';return}
+  const files=Array.from($('shelfPhoto').files||[]).slice(0,maxImgs);if(!files.length){$('shelfStatus').textContent='Choose at least one photo first.';return}
+  const prompt=`The attached photo${files.length>1?'s show':' shows'} wine bottles in someone's home wine rack or cellar. Identify every distinct wine whose label you can read, and count how many bottles of each you can see across all photos (don't double-count the same bottle seen in two photos). Today is ${new Date().toDateString()}.
+For each wine give: "name" (producer and wine, as on the label, without the vintage), "type" ("red","white","rose" or "sparkling"), "vintage" (number or null if not visible or non-vintage), "count", "style" as six numbers 1-5 [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (1 = light/savoury/unoaked/silky/soft/dry, 5 = full/jammy/vanilla oak/grippy/crisp/sweet-ripe) from what you know of this wine or its type, "retail" (typical UK price per bottle, or null if unsure), "drinkFrom" and "drinkBy" (years: the window when this wine, at this vintage, will drink best; for a non-vintage wine use this year and next year), "windowNote" (one short plain sentence on when and how to drink it), and "unsure" (true if you had to guess the wine from a partly visible label).
+Reply with only JSON: {"wines":[...]}. Leave out anything that isn't wine. Never invent a wine you can't see.`;
+  shelfCtl=new AbortController();$('shelfGo').disabled=true;$('shelfStop').hidden=false;$('shelfStatus').textContent='Reading your labels… this can take up to a minute.';$('shelfOut').innerHTML='';
+  try{const r=await sample.json(prompt,{signal:shelfCtl.signal,images:files,cache:false});
+    found=(Array.isArray(r?.wines)?r.wines:[]).filter(x=>x&&x.name).map(x=>({name:String(x.name).slice(0,100),type:TYPES[x.type]?x.type:'red',vintage:Number(x.vintage)||null,count:Math.max(1,Math.min(120,Math.round(Number(x.count)||1))),
+      a:(Array.isArray(x.style)&&x.style.length===6?x.style:[3,3,3,3,3,1]).map(v=>Math.max(1,Math.min(5,Math.round(Number(v)||3)))),
+      retail:Number(x.retail)||null,from:Number(x.drinkFrom)||null,by:Number(x.drinkBy)||null,note:String(x.windowNote||'').slice(0,200),unsure:!!x.unsure}));
+    if(!found.length){$('shelfStatus').textContent='I couldn\'t read any labels. Try closer photos with the labels facing the camera.';return}
+    $('shelfStatus').textContent=`Found ${found.length} wine${found.length===1?'':'s'}. Check the names and counts, untick anything wrong, then add.`;
+    $('shelfOut').innerHTML=found.map((x,i)=>`<div class="card" style="background:var(--sunk)">
+      <label class="row" for="fc${i}" style="font-weight:600"><input type="checkbox" id="fc${i}" ${x.unsure?'':'checked'}> Add this${x.unsure?' <span class="tag warn">Guessed from a partial label</span>':''}</label>
+      <label class="field" for="fn${i}">Wine<input type="text" id="fn${i}" value="${esc(x.name)}" maxlength="100"></label>
+      <div class="two"><label class="field" for="fv${i}">Vintage<input type="number" id="fv${i}" value="${x.vintage??''}" min="1950" max="2030" inputmode="numeric"></label>
+      <label class="field" for="fq${i}">Bottles<input type="number" id="fq${i}" value="${x.count}" min="1" max="120" inputmode="numeric"></label></div>
+      ${x.from||x.by?`<p class="meta" style="margin:0">Drink ${x.from&&x.by?`${x.from}–${x.by}`:'by '+(x.by||x.from)}${x.note?'. '+esc(x.note):''}</p>`:''}</div>`).join('')+
+      '<button class="primary" type="button" id="shelfAdd">Add ticked bottles to my rack</button>';
+    $('shelfAdd').addEventListener('click',addFound)}
+  catch(err){$('shelfStatus').textContent=err?.code==='cancelled'?'Stopped.':err?.code==='bad_key'?'Anthropic rejected your Claude key. Check it on the More tab.':err?.code==='rate_limited'?'Too many requests just now. Try again in a minute.':err?.code==='image_rejected'?'One of those photos couldn\'t be read. Try different ones.':'That didn\'t work. Try again with fewer or clearer photos.'}
+  finally{$('shelfGo').disabled=false;$('shelfStop').hidden=true;shelfCtl=null}});
+function addFound(){let added=0;
+  found.forEach((x,i)=>{if(!$('fc'+i)?.checked)return;const name=$('fn'+i).value.trim();if(!name)return;
+    const vin=Number($('fv'+i).value)||null, qty=Math.max(1,Number($('fq'+i).value)||1);
+    let w=allWines().find(o=>o.name.toLowerCase()===name.toLowerCase());
+    if(!w){const id='c-'+Date.now().toString(36)+i;w={id,name,type:x.type,shop:'Other',price:x.retail,region:'',a:x.a,note:'',source:'photo',addedAt:Date.now()};custom[id]=w;put('wines',id,w)}
+    const hid='r-'+w.id.replace(/[^A-Za-z0-9_-]/g,'')+(vin?'-'+vin:'');const ex=rack[hid];
+    rack[hid]={...(ex||{}),id:hid,wineId:w.id,name,vintage:vin,qty:(ex?.qty||0)+qty,addedAt:ex?.addedAt||Date.now(),
+      ...(x.by?{drinkFrom:x.from||null,drinkBy:x.by,windowNote:x.note,windowBy:'photo'}:{})};
+    put('rack',hid,rack[hid]);added+=qty});
+  found=[];$('shelfOut').innerHTML='';$('shelfPhoto').value='';$('shelfLabel').textContent='Photograph your rack or a few bottle labels';
+  $('shelfStatus').textContent=added?`Added ${added} bottle${added===1?'':'s'} to your rack.`:'Nothing was ticked, so nothing was added.';render()}
+
+/* ---------- add a shop's shelf to the catalogue ---------- */
+let aisleCtl=null, aisleFound=[];
+$('aisleShop').innerHTML=SHOPS.map(s=>`<option>${esc(s)}</option>`).join('');
+$('aislePhoto').addEventListener('change',e=>{const n=e.target.files?.length||0;$('aisleLabel').textContent=n?`${n} photo${n===1?'':'s'} ready`:'Choose shelf photos (as many as you like)'});
+$('aisleStop').addEventListener('click',()=>aisleCtl?.abort());
+const normName=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g,'');
+$('aisleForm').addEventListener('submit',async e=>{e.preventDefault();
+  if(!sample||!imgOK){$('aisleStatus').textContent='Reading shelves uses Claude. Add your Claude API key on the More tab.';return}
+  const files=Array.from($('aislePhoto').files||[]);if(!files.length){$('aisleStatus').textContent='Choose at least one photo first.';return}
+  const shop=$('aisleShop').value, per=Math.max(1,maxImgs), batches=[];for(let i=0;i<files.length;i+=per)batches.push(files.slice(i,i+per));
+  const prompt=`The attached photos show wine shelves in a ${shop} store in the UK, with shelf-edge price labels. List every distinct wine you can read: reds, whites, rosés and sparkling (skip fortified wines, spirits and boxes). Match each bottle to its price label where you can.
+For each give: "name" (as on the label or shelf ticket, with vintage if shown), "type" ("red","white","rose" or "sparkling"), "price" (number in GBP from the shelf label, or null if you can't read it), "region" (short, e.g. "Rioja"), "style" as six numbers 1-5 [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (1 = light/savoury/unoaked/silky/soft/dry, 5 = full/jammy/vanilla oak/grippy/crisp/sweet-ripe) from what you know of the wine or its grape and region, "note" (one short plain sentence on its style), "unsure" (true if the label was only partly readable).
+Reply with only JSON: {"wines":[...]}. Never invent a wine you can't see.`;
+  aisleCtl=new AbortController();$('aisleGo').disabled=true;$('aisleStop').hidden=false;$('aisleOut').innerHTML='';aisleFound=[];
+  const seen=new Set();let failed=0;
+  try{for(let b=0;b<batches.length;b++){
+      $('aisleStatus').textContent=`Reading photo ${b*per+1}${batches[b].length>1?'–'+(b*per+batches[b].length):''} of ${files.length}…`;
+      try{const r=await sample.json(prompt,{signal:aisleCtl.signal,images:batches[b],cache:false});
+        for(const x of (Array.isArray(r?.wines)?r.wines:[])){if(!x||!x.name)continue;const k=normName(x.name);if(seen.has(k))continue;seen.add(k);
+          aisleFound.push({name:String(x.name).slice(0,100),type:TYPES[x.type]?x.type:'red',price:Number(x.price)||null,region:String(x.region||'').slice(0,40),note:String(x.note||'').slice(0,160),unsure:!!x.unsure,
+            a:(Array.isArray(x.style)&&x.style.length===6?x.style:[3,3,2,3,3,1]).map(v=>Math.max(1,Math.min(5,Math.round(Number(v)||3)))),
+            known:allWines().some(w=>normName(w.name)===k)})}}
+      catch(err){if(err?.code==='cancelled')throw err;if(['bad_key','rate_limited'].includes(err?.code))throw err;failed++}}
+    if(!aisleFound.length){$('aisleStatus').textContent='I couldn\'t read any wines. Try photos taken square-on, with labels and price tickets in focus.';return}
+    const fresh=aisleFound.filter(x=>!x.known).length;
+    $('aisleStatus').textContent=`Found ${aisleFound.length} wines (${fresh} new to the app)${failed?`; ${failed} photo batch${failed===1?'':'es'} couldn't be read`:''}. Check and untick anything wrong.`;
+    $('aisleOut').innerHTML=aisleFound.map((x,i)=>`<div class="card" style="background:var(--sunk)">
+      <label class="row" for="ac${i}" style="font-weight:600"><input type="checkbox" id="ac${i}" ${x.unsure?'':'checked'}> ${x.known?'Update price':'Add'} <span class="tag ${x.type==='red'?'':'ex'}">${TYPES[x.type]}</span>${x.unsure?' <span class="tag warn">Partly read</span>':''}${x.known?' <span class="tag plain">Already in the app</span>':''}</label>
+      <div class="two"><label class="field" for="an${i}">Wine<input type="text" id="an${i}" value="${esc(x.name)}" maxlength="100"></label>
+      <label class="field" for="ap${i}">Price (£)<input type="number" id="ap${i}" value="${x.price??''}" min="0" step="0.01" inputmode="decimal"></label></div>
+      ${x.note?`<p class="meta" style="margin:0">${esc(x.note)}</p>`:''}</div>`).join('')+
+      `<button class="primary" type="button" id="aisleAdd">Save to ${esc(shop)}'s list</button>`;
+    $('aisleAdd').addEventListener('click',()=>saveAisle(shop))}
+  catch(err){$('aisleStatus').textContent=err?.code==='cancelled'?'Stopped.':err?.code==='bad_key'?'Anthropic rejected your Claude key. Check it on the More tab.':err?.code==='rate_limited'?'Too many requests just now. Try again in a minute, with fewer photos.':'That didn\'t work. Try again with fewer or clearer photos.'}
+  finally{$('aisleGo').disabled=false;$('aisleStop').hidden=true;aisleCtl=null}});
+async function saveAisle(shop){let added=0,updated=0;const writes=[];
+  aisleFound.forEach((x,i)=>{if(!$('ac'+i)?.checked)return;const name=$('an'+i).value.trim();if(!name)return;const price=$('ap'+i).value===''?null:Number($('ap'+i).value);
+    const k=normName(name);const ex=allWines().find(w=>normName(w.name)===k&&w.shop===shop);
+    if(ex){const upd={...ex,price:price??ex.price,seenAt:Date.now()};custom[ex.id]=upd;writes.push(['wines',ex.id,upd]);updated++}
+    else{const id='sh-'+shop.toLowerCase().replace(/[^a-z]/g,'').slice(0,4)+'-'+k.slice(0,40)+'-'+Date.now().toString(36).slice(-4);
+      const w={id,name,type:x.type,shop,price,region:x.region,a:x.a,note:x.note,source:'shelf',seenAt:Date.now(),addedAt:Date.now()};custom[id]=w;writes.push(['wines',id,w]);added++}});
+  for(const [c,id,d] of writes)await put(c,id,d);
+  aisleFound=[];$('aisleOut').innerHTML='';$('aislePhoto').value='';$('aisleLabel').textContent='Choose shelf photos (as many as you like)';
+  $('aisleStatus').textContent=added||updated?`Saved: ${added} new wine${added===1?'':'s'}${updated?`, ${updated} price${updated===1?'':'s'} updated`:''} on ${shop}'s list.`:'Nothing was ticked, so nothing was saved.';render()}
+
+/* ---------- boot ---------- */
+function loadLocal(){try{const d=JSON.parse(localStorage.getItem('pd-local')||'{}');RB=d.RB||{p1:d.ratings||{},p2:{}};if(Array.isArray(d.people))people=d.people;custom=d.custom||{};rack=d.rack||{}}catch(e){}loaded=true;render()}
+/* names */
+$('namesBtn').addEventListener('click',()=>{const f=$('namesForm'),open=f.hidden;f.hidden=!open;$('namesBtn').setAttribute('aria-expanded',String(open));
+  if(open){$('n1').value=pname('p1');$('n2').value=pname('p2');$('n1').focus()}});
+$('namesForm').addEventListener('submit',e=>{e.preventDefault();
+  people=[{id:'p1',name:$('n1').value.trim()||'Me'},{id:'p2',name:$('n2').value.trim()||'Partner'}];
+  $('namesForm').hidden=true;$('namesHint').hidden=true;$('namesBtn').setAttribute('aria-expanded','false');
+  if(db)db.doc('settings/people').set({people}).catch(()=>{});else saveLocal();render()});
+showTab();render();
+fetch('catalog.json').then(r=>r.ok?r.json():[]).then(list=>{if(!Array.isArray(list))return;
+  const norm=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g,'');const have=new Set(CAT.map(w=>norm(w.name)));
+  for(const w of list){if(w&&w.id&&Array.isArray(w.a)&&!have.has(norm(w.name))){CAT.push(w);have.add(norm(w.name))}}render()}).catch(()=>{});
+/* ---------- Claude, through the person's own API key (stored only on this phone) ---------- */
+const KEYSTORE='pd-claude-key', MODELS={default:'claude-sonnet-5-5',complex:'claude-sonnet-5-5',quick:'claude-haiku-5-5'};
+const getKey=()=>{try{return localStorage.getItem(KEYSTORE)||''}catch(e){return ''}};
+async function imgPart(file){ /* shrink to about 1.5 megapixels so uploads are quick and cheap */
+  const bmp=await createImageBitmap(file).catch(()=>null);if(!bmp)throw {code:'image_rejected'};
+  const s=Math.min(1,Math.sqrt(1500000/(bmp.width*bmp.height)));const c=document.createElement('canvas');c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);const data=c.toDataURL('image/jpeg',0.85).split(',')[1];
+  return {type:'image',source:{type:'base64',media_type:'image/jpeg',data}}}
+function makeSample(key){
+  const call=async(input,opts={})=>{
+    const imgs=opts.images?Array.from(opts.images.length!=null?opts.images:[opts.images]).slice(0,5):[];
+    const content=[...(await Promise.all(imgs.map(imgPart))),{type:'text',text:String(input)}];
+    let res;try{res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:opts.signal,
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:MODELS[opts.modelTier]||MODELS.default,max_tokens:4000,messages:[{role:'user',content}]})})}
+    catch(e){throw {code:e?.name==='AbortError'?'cancelled':'upstream_error'}}
+    if(res.status===401||res.status===403)throw {code:'bad_key'};
+    if(res.status===429||res.status===529)throw {code:'rate_limited'};
+    if(!res.ok)throw {code:'upstream_error'};
+    const j=await res.json();return {text:(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('')}};
+  call.json=async(input,opts)=>{const {text}=await call(input+'\n\nReply with the JSON only.',opts);
+    const tryP=s=>{try{return JSON.parse(s)}catch(e){return undefined}};
+    let v=tryP(text);if(v===undefined){const m=text.match(/```(?:json)?\s*([\s\S]*?)```/);if(m)v=tryP(m[1])}
+    if(v===undefined){const a=text.search(/[\[{]/),b=Math.max(text.lastIndexOf('}'),text.lastIndexOf(']'));if(a>=0&&b>a)v=tryP(text.slice(a,b+1))}
+    if(v===undefined)throw {code:'invalid_json'};return v};
+  call.limits=async()=>({maxPromptBytes:65536,images:{maxCount:5}});
+  return call}
+function applySampleUI(){const k=getKey();sample=k?makeSample(k):null;imgOK=!!sample;maxImgs=5;
+  const need='Add your Claude API key on the More tab to turn this on.';
+  for(const id of ['photoWrap','shelfWrap','aisleWrap'])$(id).hidden=!imgOK;
+  for(const id of ['shelfGo','aisleGo'])$(id).hidden=!imgOK;
+  $('scanGo').disabled=false;$('scanTextLabel').textContent=imgOK?'Or paste the list':'Paste the list';
+  $('shelfStatus').textContent=imgOK?'Labels facing the camera work best. You check every bottle before anything is added.':`Reading photos uses Claude. ${need} You can still add bottles by hand below.`;
+  $('aisleStatus').textContent=imgOK?'You check every bottle before anything is added.':`Reading shelves uses Claude. ${need}`;
+  $('scanStatus').textContent=imgOK?'':`Scanning uses Claude. ${need}`;
+  $('keyState').textContent=k?`Claude features are on (key ending …${k.slice(-4)}).`:'Claude features are off.';$('keyClear').hidden=!k}
+/* ---------- More tab: key, backup, restore ---------- */
+$('keyForm').addEventListener('submit',async e=>{e.preventDefault();const k=$('keyIn').value.trim();
+  if(!/^sk-ant-/.test(k)){$('keyMsg').textContent='That doesn\'t look like an Anthropic API key. It starts with sk-ant-.';return}
+  $('keyMsg').textContent='Checking the key…';
+  try{await makeSample(k)('Reply with the word OK.',{modelTier:'quick'});try{localStorage.setItem(KEYSTORE,k)}catch(e){}
+    $('keyIn').value='';$('keyMsg').textContent='Key saved on this phone. Photo and list scanning are now on.';applySampleUI()}
+  catch(err){$('keyMsg').textContent=err?.code==='bad_key'?'Anthropic rejected that key. Check you copied all of it.':'Couldn\'t reach Claude to check the key. Try again when you have signal.'}});
+$('keyClear').addEventListener('click',()=>{try{localStorage.removeItem(KEYSTORE)}catch(e){}$('keyMsg').textContent='Key removed from this phone.';applySampleUI()});
+$('backupBtn').addEventListener('click',()=>{const data=JSON.stringify({app:'pour-decision',v:1,at:new Date().toISOString(),RB,people,custom,rack},null,1);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=`pour-decision-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);$('backupMsg').textContent='Backup file created. Keep it somewhere safe, like iCloud Drive or Google Drive.'});
+$('restoreIn').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;
+  try{const d=JSON.parse(await f.text());if(d.app!=='pour-decision')throw 0;
+    RB=d.RB||{p1:{},p2:{}};if(Array.isArray(d.people))people=d.people;custom=d.custom||{};rack=d.rack||{};saveLocal();render();
+    $('backupMsg').textContent=`Restored the backup from ${String(d.at||'').slice(0,10)||'that file'}.`}
+  catch(err){$('backupMsg').textContent='That file isn\'t a Pour Decision backup.'}e.target.value=''});
+/* ---------- weekly scout report and shared catalogue, both published to the app's website ---------- */
+fetch('scout.json',{cache:'no-cache'}).then(r=>r.ok?r.json():null).then(s=>{if(s&&s.summary){scout=s;render()}}).catch(()=>{});
+applySampleUI();loadLocal();
+if(!localStorage.getItem('pd-local')){$('namesForm').hidden=false;$('namesBtn').setAttribute('aria-expanded','true');$('n1').value='';$('n2').value='';$('namesHint').hidden=false}
+/* ---------- install + updates ---------- */
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').then(reg=>{reg.update();
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update()})}).catch(()=>{});
+  let had=!!navigator.serviceWorker.controller;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had)toast('Updated to the latest version.');had=true})}
+function toast(t){const el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,4000)}
+</script>
+</body>
+</html>
