@@ -510,7 +510,7 @@ function card(w,P,opts={}){const inRack=Object.values(rack).some(h=>h.wineId===w
 function filtersHTML(){return `<div class="row" role="group" aria-label="Shop">`+
   [['all','All shops']].concat(SHOPS.map(s=>[s,s])).map(([v,l])=>`<button class="chip" type="button" data-shop="${esc(v)}" aria-pressed="${prefs.shop===v}">${esc(l)}</button>`).join('')+
   `</div><div class="row"><span class="label">Spend up to</span><select class="budgetSel" aria-label="Spend up to">`+
-  [[999,'Any price'],[8,'£8'],[10,'£10'],[12,'£12'],[15,'£15'],[25,'£25']].map(([v,l])=>`<option value="${v}"${prefs.budget==v?' selected':''}>${l}</option>`).join('')+
+  [[999,'Any price'],[8,'£8'],[10,'£10'],[12,'£12'],[15,'£15'],[20,'£20'],[25,'£25'],[30,'£30'],[40,'£40'],[50,'£50'],[75,'£75'],[100,'£100']].map(([v,l])=>`<option value="${v}"${prefs.budget==v?' selected':''}>${l}</option>`).join('')+
   `</select></div><div class="adv"><span>Stay close</span><input class="advSel" type="range" min="0" max="100" value="${prefs.adv}" aria-label="How far the next picks stretch from your usual"><span>Stretch me</span></div>`}
 
 /* ---------- render ---------- */
