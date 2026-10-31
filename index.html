@@ -279,6 +279,20 @@ input[type=range]{width:100%;accent-color:var(--wine)}
     <div id="noteRate"></div>
     <p class="meta" style="margin:0">What stood out? Optional, but this is what teaches it fastest.</p>
     <div id="noteRows" class="list"></div>
+    <details id="editBox" style="background:var(--sunk)">
+      <summary>Edit this bottle</summary>
+      <div class="list" style="margin-top:10px">
+        <label class="field" for="eName">Name<input id="eName" type="text" maxlength="100" autocomplete="off"></label>
+        <div class="two">
+          <label class="field" for="eType">Type<select id="eType"><option value="red">Red</option><option value="white">White</option><option value="rose">Rosé</option><option value="sparkling">Sparkling</option></select></label>
+          <label class="field" for="eShop">Where from<select id="eShop"></select></label>
+        </div>
+        <label class="field" for="ePrice">Price (£)<input id="ePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+        <div id="eSliders" class="list"></div>
+        <button class="btn" type="button" id="eSave">Save changes</button>
+        <p class="status" id="eMsg" role="status"></p>
+      </div>
+    </details>
     <div class="row"><button class="primary" type="button" id="noteSave">Save</button><button class="btn" type="button" id="noteSkip">Close</button></div>
   </div>
 </div>
@@ -288,8 +302,15 @@ input[type=range]{width:100%;accent-color:var(--wine)}
 <div class="sheet" id="addSheet" role="dialog" aria-modal="true" aria-labelledby="addTitle" hidden>
   <form class="sheet-in" id="addForm">
     <h3 id="addTitle">Add a bottle</h3>
-    <label class="field" for="fName">Wine<input id="fName" type="text" required maxlength="100" placeholder="e.g. Tesco Finest Appassimento" list="wineNames" autocomplete="off"></label>
+    <label class="field" for="fName">Wine<input id="fName" type="text" required maxlength="100" placeholder="Type the name, e.g. Mucho Mas" autocomplete="off" autocapitalize="words"></label>
     <datalist id="wineNames"></datalist>
+    <div id="matchList" class="list" aria-live="polite"></div>
+    <div class="row" id="idRow">
+      <button class="btn" type="button" id="idBtn">Identify with Claude</button>
+      <label class="btn" id="labelWrap" for="labelPhoto" style="display:inline-flex;align-items:center">Photo of the label<input id="labelPhoto" type="file" accept="image/*" capture="environment" style="position:absolute;opacity:0;width:1px;height:1px"></label>
+    </div>
+    <p class="status" id="idStatus" role="status"></p>
+    <div id="idOut" class="list"></div>
     <label class="field" for="fType">Type<select id="fType"><option value="red">Red</option><option value="white">White</option><option value="rose">Rosé</option><option value="sparkling">Sparkling</option></select></label>
     <div class="two">
       <label class="field" for="fShop">Where from<select id="fShop"></select></label>
@@ -303,7 +324,7 @@ input[type=range]{width:100%;accent-color:var(--wine)}
     <label class="field" for="fRate">Tasted it?
       <select id="fRate"><option value="">Not yet</option><option value="2">Loved it</option><option value="1">Liked it</option><option value="0">Meh</option><option value="-2">Not again</option></select></label>
     <div id="styleWrap" class="list">
-      <span class="label">Style, if you know it</span>
+      <span class="label" id="styleLabel">Style, if you know it</span>
       <div id="fSliders" class="list"></div>
     </div>
     <div class="row"><button class="primary" type="submit">Save</button><button class="btn" type="button" id="addCancel">Cancel</button></div>
@@ -590,12 +611,21 @@ let sheetWine=null, sheetNotes={}, notesFor='p1';
 function openNotes(id,pid){const w=byId(id);if(!w)return;sheetWine=id;
   sheetNotes=Object.fromEntries(PIDS.map(p=>[p,Object.assign({},R(p)[id]?.notes||{})]));
   notesFor=pid||active().find(p=>R(p)[id])||active()[0];
-  $('noteTitle').textContent=w.name;drawNotes();$('noteBg').hidden=false;$('noteSheet').hidden=false;$('noteSheet').querySelector('button')?.focus()}
+  $('noteTitle').textContent=w.name;drawNotes();fillEdit();$('noteBg').hidden=false;$('noteSheet').hidden=false;$('noteSheet').querySelector('button')?.focus()}
 function drawNotes(){const pids=active();$('noteRate').innerHTML=rateRow(sheetWine,pids);
   const sw=pids.length>1?`<div class="row" role="group" aria-label="Whose notes">${pids.map(p=>`<button class="chip" type="button" data-notesfor="${p}" aria-pressed="${notesFor===p}">${esc(pname(p))}'s notes</button>`).join('')}</div>`:'';
   const nt=sheetNotes[notesFor]||{};
   $('noteRows').innerHTML=sw+dimsFor(typeOf(byId(sheetWine))).map(D=>`<div class="note-row"><span class="label">${D.k}</span><div class="opts" role="group" aria-label="${D.k}">`+
     ['less','right','more'].map((v,j)=>`<button type="button" data-nk="${D.k}" data-nv="${v}" aria-pressed="${nt[D.k]===v}">${D.notes[j]}</button>`).join('')+'</div></div>').join('')}
+$('eShop').innerHTML=SHOPS.concat(['Other']).map(s=>`<option>${esc(s)}</option>`).join('');
+$('eSliders').innerHTML='<span class="label">Style</span>'+DIMS.map((D,i)=>`<label class="slider" for="es${i}"><span>${D.k}</span><input id="es${i}" type="range" min="1" max="5" step="1" aria-label="${D.k}, ${D.lo} to ${D.hi}"><output id="eo${i}"></output></label>`).join('');
+DIMS.forEach((D,i)=>$('es'+i).addEventListener('input',e=>$('eo'+i).textContent=e.target.value));
+function fillEdit(){const w=byId(sheetWine);if(!w)return;$('editBox').open=false;$('eMsg').textContent='';
+  $('eName').value=w.name;$('eType').value=typeOf(w);$('eShop').value=SHOPS.includes(w.shop)?w.shop:'Other';$('ePrice').value=w.price??'';
+  w.a.forEach((v,i)=>{$('es'+i).value=v;$('eo'+i).textContent=v})}
+$('eSave').addEventListener('click',()=>{const w=byId(sheetWine);if(!w)return;const name=$('eName').value.trim();if(!name){$('eMsg').textContent='The name can\'t be empty.';return}
+  const upd={...w,name,type:$('eType').value,shop:$('eShop').value,price:$('ePrice').value===''?null:Number($('ePrice').value),a:DIMS.map((D,i)=>Number($('es'+i).value)),editedAt:Date.now()};
+  custom[w.id]=upd;put('wines',w.id,upd);$('noteTitle').textContent=name;$('eMsg').textContent='Saved. Your palate now uses these details.';render();drawNotes()});
 function closeNotes(){$('noteBg').hidden=true;$('noteSheet').hidden=true;sheetWine=null}
 $('noteSave').addEventListener('click',()=>{const id=sheetWine;
   if(id)for(const p of PIDS){const r=R(p)[id];if(r){R(p)[id]={...r,notes:sheetNotes[p]||{}};put('ratings',rdoc(p,id),R(p)[id])}}
@@ -650,25 +680,93 @@ $('fSliders').innerHTML=DIMS.map((D,i)=>`<label class="slider" for="fs${i}"><spa
   <input id="fs${i}" type="range" min="1" max="5" step="1" value="3" aria-label="${D.k}, ${D.lo} to ${D.hi}"><output id="fo${i}">3</output></label>`).join('');
 DIMS.forEach((D,i)=>$('fs'+i).addEventListener('input',e=>$('fo'+i).textContent=e.target.value));
 let addMode='log';
-function openAdd(mode){addMode=mode;$('addForm').reset();
+function openAdd(mode){addMode=mode;$('addForm').reset();resetLookup();
   $('fWho').innerHTML=PIDS.map(p=>`<option value="${p}">${esc(pname(p))}</option>`).join('');$('fWho').value=who()==='both'?'p1':who();DIMS.forEach((D,i)=>$('fo'+i).textContent='3');$('addStatus').textContent='';
   $('fQty').value=mode==='rack'?'1':'0';$('fRate').value=mode==='rack'?'':'1';$('addTitle').textContent=mode==='rack'?'Add bottles to your rack':'Log a bottle';
   $('addBg').hidden=false;$('addSheet').hidden=false;$('fName').focus()}
 function closeAdd(){$('addBg').hidden=true;$('addSheet').hidden=true}
 $('addCancel').addEventListener('click',closeAdd);$('addBg').addEventListener('click',closeAdd);
-$('fName').addEventListener('change',()=>{const w=allWines().find(x=>x.name===$('fName').value);
+$('fName').addEventListener('change',()=>{const w=picked||allWines().find(x=>normW(x.name)===normW($('fName').value));if(w)picked=w;
   if(w){$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';$('fType').value=typeOf(w);$('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;
     w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});$('styleWrap').hidden=true}else $('styleWrap').hidden=false});
 $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fName').value.trim();if(!name){$('addStatus').textContent='Add the wine\'s name first.';return}
-  let w=allWines().find(x=>x.name.toLowerCase()===name.toLowerCase());
-  if(!w){const id='c-'+Date.now().toString(36);
-    w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?null:Number($('fPrice').value),region:'',a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:'',source:'you',addedAt:Date.now()};
+  let w=picked||allWines().find(x=>normW(x.name)===normW(name));
+  if(!w&&!identified&&!slidersTouched&&!warnedUnknown){warnedUnknown=true;
+    $('addStatus').textContent=sample?'I don\'t know this bottle yet. Tap "Identify with Claude" (or set the style sliders) so it can teach your palate. Tap Save again to save it anyway.'
+      :'I don\'t know this bottle yet. Set the style sliders roughly so it can teach your palate, or tap Save again to save it anyway.';$('idBtn').focus();return}
+  if(!w){const id='c-'+Date.now().toString(36);const I=identified||{};
+    w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?(I.price??null):Number($('fPrice').value),region:I.region||'',grape:I.grape||'',
+      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',source:identified?'lookup':'you',addedAt:Date.now()};
     custom[id]=w;put('wines',id,w)}
   const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
   if(qty>0)rackAdd(w.id,qty,vin);
   closeAdd();$('styleWrap').hidden=false;
   if(rate!==''){const pid=$('fWho').value||active()[0];prefs.ptype=typeOf(w);if(who()!=='both')prefs.who=pid;storePrefs();R(pid)[w.id]={person:pid,wineId:w.id,score:Number(rate),at:Date.now()};put('ratings',rdoc(pid,w.id),R(pid)[w.id]);render();openNotes(w.id,pid)}
   else if(who()==='both'&&qty===0){render();openNotes(w.id)}else render()});
+
+
+/* ---------- wine lookup for the 'Log a bottle' sheet ---------- */
+let picked=null, identified=null, slidersTouched=false, warnedUnknown=false, idCtl=null;
+const normW=s=>String(s||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+const STOP=new Set(['the','de','di','del','la','le','du','des','and','wine','vino','red','white','tinto','rosso','blanco','bianco','finest','deluxe','ttd','taste','difference','specially','selected','society','s']);
+function searchWines(q){const qt=normW(q).split(' ').filter(t=>t.length>1&&!STOP.has(t));if(!qt.length)return [];
+  return allWines().map(w=>{const wt=normW(w.name+' '+(w.region||'')).split(' ');let sc=0;
+    for(const t of qt){let b=0;for(const x of wt){if(x===t){b=1;break}if(x.startsWith(t)||t.startsWith(x)&&x.length>3)b=Math.max(b,0.8);else if(x.includes(t)&&t.length>3)b=Math.max(b,0.5)}sc+=b}
+    return {w,s:sc/qt.length}}).filter(x=>x.s>=0.6).sort((a,b)=>b.s-a.s).slice(0,5)}
+function resetLookup(){picked=null;identified=null;slidersTouched=false;warnedUnknown=false;idCtl?.abort();
+  $('matchList').innerHTML='';$('idOut').innerHTML='';$('idStatus').textContent='';$('labelPhoto').value='';
+  $('labelWrap').hidden=!imgOK;$('idBtn').hidden=false;$('styleWrap').hidden=false;$('styleLabel').textContent='Style, if you know it'}
+function pickWine(w){picked=w;identified=null;$('fName').value=w.name;$('fType').value=typeOf(w);$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';
+  $('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});
+  $('styleWrap').hidden=true;$('idOut').innerHTML='';$('idStatus').textContent='';
+  $('matchList').innerHTML=`<div class="card" style="background:var(--sunk)"><div class="name">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.region,w.shop==='Other'?'':w.shop,gbp(w.price)].filter(Boolean).join(' · '))}</div>${w.note?`<p class="why">${esc(w.note)}</p>`:''}<div class="row"><span class="tag">Found in the app</span><button class="btn" type="button" data-unpick="1" style="min-height:36px">Not this one</button></div></div>`}
+function showMatches(){const q=$('fName').value;picked=null;identified=null;warnedUnknown=false;$('styleWrap').hidden=false;$('idOut').innerHTML='';
+  if(q.trim().length<3){$('matchList').innerHTML='';return}
+  const m=searchWines(q);
+  $('matchList').innerHTML=m.length?`<span class="label">Is it one of these?</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div><span class="tag plain">Pick</span></button>`).join('')
+    :`<p class="meta" style="margin:0">Not in the app's list yet.${sample?' Tap "Identify with Claude" and it will work out what it is.':''}</p>`}
+let mt=null;$('fName').addEventListener('input',()=>{clearTimeout(mt);mt=setTimeout(showMatches,180)});
+$('fSliders').addEventListener('input',()=>{slidersTouched=true});
+$('labelPhoto').addEventListener('change',()=>{if($('labelPhoto').files?.[0]){$('idStatus').textContent='Label photo ready.';identify()}});
+$('idBtn').addEventListener('click',()=>identify());
+async function identify(text){
+  if(!sample){$('idStatus').textContent=typeof getKey==='function'?'Looking up unknown bottles uses Claude. Add your Claude API key on the More tab.':'Looking up unknown bottles needs Claude, which isn\'t available here. Set the style sliders instead.';return}
+  const name=(text||$('fName').value).trim(),photo=$('labelPhoto').files?.[0];
+  if(!name&&!photo){$('idStatus').textContent='Type the name or take a photo of the label first.';return}
+  idCtl?.abort();idCtl=new AbortController();$('idBtn').disabled=true;$('idStatus').textContent='Working out which wine this is…';$('idOut').innerHTML='';
+  const prompt=`Identify a wine for a UK wine-tasting app.${name?` The person typed: "${name.slice(0,120)}".`:''}${$('fVintage').value?` Vintage: ${$('fVintage').value}.`:''}${$('fShop').value&&$('fShop').value!=='Other'?` Bought at: ${$('fShop').value}.`:''}${photo?' A photo of the label is attached; read the producer, wine name, region and vintage from it.':''}
+The typed name may be misspelt, partial or a nickname (e.g. "mucho mas" is Mucho Más Tinto). Work out the specific wine most likely meant, ideally one sold in the UK.
+Reply with only JSON: {"found": true or false, "name": "producer and wine name as on the label, without vintage", "vintage": number or null, "type": "red"|"white"|"rose"|"sparkling", "grape": "main grape(s)", "region": "region, country", "style": [Body, Fruit, Oak, Tannin, Freshness, Ripeness], "price": typical UK retail price per 75cl in GBP or null, "note": "one plain sentence on how it tastes", "confidence": "high"|"medium"|"low", "alternatives": ["up to 3 other specific wines it might be"]}.
+Style scales are 1-5. Reds: light-full, savoury-jammy, unoaked-vanilla oak, silky-grippy, soft-crisp, dry-sweet/ripe. Whites, rosés and sparkling: Fruit citrus/mineral to ripe/tropical, Oak unoaked to oaky/creamy (sparkling: fresh to toasty), Freshness soft to zesty, Ripeness bone dry to sweet, Tannin 1.
+If you can't tell which wine it is, set found to false, give your best guess at the style from the name, and list alternatives. Never invent a producer or a wine that doesn't exist.`;
+  try{const r=await sample.json(prompt,{signal:idCtl.signal,images:photo?[photo]:undefined,cache:false});
+    if(!r||!Array.isArray(r.style)||r.style.length!==6)throw {code:'invalid_json'};
+    r.style=r.style.map(v=>Math.max(1,Math.min(5,Math.round(Number(v)||3))));r.type=TYPES[r.type]?r.type:'red';
+    const inApp=r.name?allWines().find(w=>normW(w.name).includes(normW(r.name))||normW(r.name).includes(normW(w.name))&&normW(w.name).length>8):null;
+    if(inApp){$('idStatus').textContent='That wine is already in the app.';pickWine(inApp);return}
+    $('idStatus').textContent='';showIdentified(r)}
+  catch(err){$('idStatus').textContent=err?.code==='cancelled'?'':err?.code==='bad_key'?'Anthropic rejected your Claude key. Check it on the More tab.':err?.code==='rate_limited'?'Too many requests just now. Try again in a minute.':'Couldn\'t identify it just now. Try again, or set the style sliders yourself.'}
+  finally{$('idBtn').disabled=false}}
+function showIdentified(r){window._idr=r;const conf={high:['Confident',''],medium:['Fairly sure','plain'],low:['Best guess','warn']}[r.confidence]||['Best guess','warn'];
+  $('idOut').innerHTML=`<div class="card" style="background:var(--sunk)">
+    <span class="label">${r.found===false?'Couldn\'t pin it down. Closest match':'Is this the wine?'}</span>
+    <div class="name">${esc(r.name||$('fName').value)}${r.vintage?' '+r.vintage:''}</div>
+    <div class="meta">${esc([TYPES[r.type],r.grape,r.region,r.price?'about '+gbp(r.price):''].filter(Boolean).join(' · '))}</div>
+    ${r.note?`<p class="why">${esc(r.note)}</p>`:''}
+    <div class="row"><span class="tag ${conf[1]}">${conf[0]}</span></div>
+    <div class="row"><button class="primary" type="button" data-idok="1">Yes, that's it</button><button class="btn" type="button" data-idno="1">No</button></div>
+    ${(r.alternatives||[]).length?`<div class="list"><span class="label">Or is it…</span>${r.alternatives.slice(0,3).map(a=>`<button class="btn" type="button" data-idalt="${esc(a)}" style="text-align:left">${esc(a)}</button>`).join('')}</div>`:''}</div>`}
+function acceptIdentified(){const r=window._idr;if(!r)return;identified=r;picked=null;
+  if(r.name)$('fName').value=r.name+(r.vintage?' '+r.vintage:'');$('fType').value=r.type;if($('fPrice').value===''&&r.price)$('fPrice').value=r.price;if(r.vintage&&!$('fVintage').value)$('fVintage').value=r.vintage;
+  r.style.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});$('styleWrap').hidden=false;$('styleLabel').textContent='Style, from Claude. Adjust if you like';
+  $('matchList').innerHTML='';$('idOut').innerHTML=`<p class="status" style="margin:0">Got it: ${esc(r.name||'')}. Now choose your rating and save.</p>`}
+document.addEventListener('click',e=>{
+  const pk=e.target.closest('[data-pick]');if(pk){const w=byId(pk.dataset.pick);if(w)pickWine(w);return}
+  if(e.target.closest('[data-unpick]')){picked=null;$('styleWrap').hidden=false;showMatches();$('matchList').innerHTML='';$('idStatus').textContent=sample?'OK. Tap "Identify with Claude" to look it up.':'OK. Set the style sliders for this bottle.';return}
+  if(e.target.closest('[data-idok]')){acceptIdentified();return}
+  if(e.target.closest('[data-idno]')){$('idOut').innerHTML='';$('idStatus').textContent='Try adding more of the name, or take a photo of the label.';return}
+  const al=e.target.closest('[data-idalt]');if(al){$('fName').value=al.dataset.idalt;identify(al.dataset.idalt);return}
+});
 
 /* ---------- food pairing ---------- */
 $('foodChips').innerHTML=['Roast lamb','Steak','Curry','Pizza','Roast chicken','Fish & chips','Salmon','Mussels','Thai green curry','Cheese board'].map(f=>`<button class="chip" type="button" data-food="${f}">${f}</button>`).join('');
