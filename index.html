@@ -88,6 +88,10 @@ input[type=range]{width:100%;accent-color:var(--wine)}
 .rate button[aria-pressed="true"]{background:var(--wine);border-color:var(--wine);color:var(--surface)}
 .rate button[data-s="-2"][aria-pressed="true"]{background:var(--bad);border-color:var(--bad)}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{width:44px;height:66px;object-fit:contain;border-radius:6px;background:var(--sunk);flex:none}
+.thumb.lg{width:72px;height:108px}
+.with-thumb{display:flex;gap:12px;align-items:flex-start;min-width:0}
+.with-thumb>div{min-width:0}
 .tag{font:600 12px var(--f-body);padding:4px 10px;border-radius:12px;background:var(--wine-soft);color:var(--wine);white-space:nowrap}
 .tag.ex{background:var(--explore-soft);color:var(--explore)}
 .tag.warn{background:var(--warn-soft);color:var(--warn)}
@@ -392,6 +396,9 @@ const CAT=[
  W('w-glorioso','Glorioso Reserva 2021','Wine Society',14.95,'Rioja',[4,3,4,3,3,1],'Reserva Rioja, good with lamb.'),
  W('w-sabina','Sabina Tempranillo 2025','Wine Society',7.95,'Navarra',[2,3,1,2,3,1],'Easy-drinking and light.')
 ];
+
+/* label pictures for built-in wines (Open Food Facts) */
+[['mucho-mas','https://images.openfoodfacts.org/images/products/841/070/206/3043/front_es.3.400.jpg'],['t-kadette','https://images.openfoodfacts.org/images/products/600/980/116/7039/front_fr.7.400.jpg']].forEach(([id,u])=>{const w=CAT.find(x=>x.id===id);if(w)w.img=u});
 const RATES=[[2,'Loved'],[1,'Liked'],[0,'Meh'],[-2,'Not again']];
 /* Food rules: types in order of preference; t = ideal style [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (null = doesn't matter).
    Checked top to bottom, so specific dishes come before general ones. */
@@ -438,6 +445,7 @@ let prefs={shop:'all',budget:999,adv:50};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem('pd-prefs')||'{}'))}catch(e){}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const thumb=(w,lg)=>w&&w.img&&/^(https:|data:image\/)/.test(w.img)?`<img class="thumb${lg?' lg':''}" src="${esc(w.img)}" alt="Label of ${esc(w.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:'';
 const allWines=()=>CAT.filter(w=>!custom[w.id]).concat(Object.values(custom));
 const byId=id=>custom[id]||CAT.find(w=>w.id===id);
 const gbp=p=>p!=null&&p!==''&&!isNaN(p)?'£'+Number(p).toFixed(2):'';
@@ -522,8 +530,8 @@ function rateRow(id,pids){pids=pids||active();
 function fitHTML(w,label){const f=fitFor(w);
   return `<div class="fit"><span class="n">${fitPct(f.pred)}%</span><span class="c">${f.each?esc(`${pname('p1')} ${fitPct(f.each.p1)} · ${pname('p2')} ${fitPct(f.each.p2)}`):label||conf(f.cov)}</span></div>`}
 function card(w,P,opts={}){const inRack=Object.values(rack).some(h=>h.wineId===w.id);
-  return `<article class="card${opts.ex?' ex':''}"><div class="top"><div><div class="name">${esc(w.name)}</div>
-   <div class="meta">${esc([w.region,w.shop==='Other'?'':w.shop,gbp(w.price)||(w.shop==='Other'?'':'price: check shelf')].filter(Boolean).join(' · '))}</div></div>
+  return `<article class="card${opts.ex?' ex':''}"><div class="top"><div class="with-thumb">${thumb(w)}<div><div class="name">${esc(w.name)}</div>
+   <div class="meta">${esc([w.region,w.shop==='Other'?'':w.shop,gbp(w.price)||(w.shop==='Other'?'':'price: check shelf')].filter(Boolean).join(' · '))}</div></div></div>
    ${fitHTML(w)}</div>
    ${w.source==='scout'?`<span class="tag ${w.lane==='explore'?'ex':''}" style="align-self:flex-start">${(w.lane==='explore'?'Scout: explore':w.lane==='shared'?'Scout: for you both':'Scout: step up')+(w.forPerson&&w.forPerson!=='both'?' · for '+esc(pname(w.forPerson)):'')}</span>`:''}
    ${w.note?`<p class="why">${esc(w.note)}</p>`:''}${opts.extra||''}${rateRow(w.id)}
@@ -601,7 +609,7 @@ function renderLog(P){const pids=active(),both=pids.length>1;
       return `<span class="tag${r.score<0?' neg':''}">${both?esc(pname(p))+': ':''}${l}</span>`}).join('');
     const nn=pids.reduce((s,p)=>s+Object.keys(R(p)[w.id]?.notes||{}).length,0);
     return `<button type="button" class="item" data-note="${esc(w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer">
-     <div><div class="name" style="font-size:15px">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.shop==='Other'?'':w.shop,gbp(w.price),nn?`${nn} note${nn===1?'':'s'}`:'no notes yet'].filter(Boolean).join(' · '))}</div></div>
+     <div class="with-thumb">${thumb(w)}<div><div class="name" style="font-size:15px">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.shop==='Other'?'':w.shop,gbp(w.price),nn?`${nn} note${nn===1?'':'s'}`:'no notes yet'].filter(Boolean).join(' · '))}</div></div></div>
      <span class="row" style="gap:4px;justify-content:flex-end">${tags}</span></button>`}).join('')
    :'<div class="empty">Nothing rated yet.</div>'}
 
@@ -696,7 +704,7 @@ $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fNam
       :'I don\'t know this bottle yet. Set the style sliders roughly so it can teach your palate, or tap Save again to save it anyway.';$('idBtn').focus();return}
   if(!w){const id='c-'+Date.now().toString(36);const I=identified||{};
     w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?(I.price??null):Number($('fPrice').value),region:I.region||'',grape:I.grape||'',
-      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',source:identified?'lookup':'you',addedAt:Date.now()};
+      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',img:I.img||undefined,source:identified?'lookup':'you',addedAt:Date.now()};
     custom[id]=w;put('wines',id,w)}
   const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
   if(qty>0)rackAdd(w.id,qty,vin);
@@ -705,6 +713,10 @@ $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fNam
   else if(who()==='both'&&qty===0){render();openNotes(w.id)}else render()});
 
 
+
+/* small JPEG copy of a label photo, kept with the wine so its picture shows later */
+async function makeThumb(file){const bmp=await createImageBitmap(file);const s=Math.min(1,240/bmp.height,240/bmp.width);
+  const c=document.createElement('canvas');c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.72)}
 /* ---------- wine lookup for the 'Log a bottle' sheet ---------- */
 let picked=null, identified=null, slidersTouched=false, warnedUnknown=false, idCtl=null;
 const normW=s=>String(s||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
@@ -719,11 +731,11 @@ function resetLookup(){picked=null;identified=null;slidersTouched=false;warnedUn
 function pickWine(w){picked=w;identified=null;$('fName').value=w.name;$('fType').value=typeOf(w);$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';
   $('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});
   $('styleWrap').hidden=true;$('idOut').innerHTML='';$('idStatus').textContent='';
-  $('matchList').innerHTML=`<div class="card" style="background:var(--sunk)"><div class="name">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.region,w.shop==='Other'?'':w.shop,gbp(w.price)].filter(Boolean).join(' · '))}</div>${w.note?`<p class="why">${esc(w.note)}</p>`:''}<div class="row"><span class="tag">Found in the app</span><button class="btn" type="button" data-unpick="1" style="min-height:36px">Not this one</button></div></div>`}
+  $('matchList').innerHTML=`<div class="card" style="background:var(--sunk)"><div class="with-thumb">${thumb(w,1)}<div><div class="name">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.region,w.shop==='Other'?'':w.shop,gbp(w.price)].filter(Boolean).join(' · '))}</div></div></div>${w.note?`<p class="why">${esc(w.note)}</p>`:''}<div class="row"><span class="tag">Found in the app</span><button class="btn" type="button" data-unpick="1" style="min-height:36px">Not this one</button></div></div>`}
 function showMatches(){const q=$('fName').value;picked=null;identified=null;warnedUnknown=false;$('styleWrap').hidden=false;$('idOut').innerHTML='';
   if(q.trim().length<3){$('matchList').innerHTML='';return}
   const m=searchWines(q);
-  $('matchList').innerHTML=m.length?`<span class="label">Is it one of these?</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div><span class="tag plain">Pick</span></button>`).join('')
+  $('matchList').innerHTML=m.length?`<span class="label">Is it one of these?</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div class="with-thumb">${thumb(x.w)}<div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div></div><span class="tag plain">Pick</span></button>`).join('')
     :`<p class="meta" style="margin:0">Not in the app's list yet.${sample?' Tap "Identify with Claude" and it will work out what it is.':''}</p>`}
 let mt=null;$('fName').addEventListener('input',()=>{clearTimeout(mt);mt=setTimeout(showMatches,180)});
 $('fSliders').addEventListener('input',()=>{slidersTouched=true});
@@ -739,19 +751,21 @@ The typed name may be misspelt, partial or a nickname (e.g. "mucho mas" is Mucho
 Reply with only JSON: {"found": true or false, "name": "producer and wine name as on the label, without vintage", "vintage": number or null, "type": "red"|"white"|"rose"|"sparkling", "grape": "main grape(s)", "region": "region, country", "style": [Body, Fruit, Oak, Tannin, Freshness, Ripeness], "price": typical UK retail price per 75cl in GBP or null, "note": "one plain sentence on how it tastes", "confidence": "high"|"medium"|"low", "alternatives": ["up to 3 other specific wines it might be"]}.
 Style scales are 1-5. Reds: light-full, savoury-jammy, unoaked-vanilla oak, silky-grippy, soft-crisp, dry-sweet/ripe. Whites, rosés and sparkling: Fruit citrus/mineral to ripe/tropical, Oak unoaked to oaky/creamy (sparkling: fresh to toasty), Freshness soft to zesty, Ripeness bone dry to sweet, Tannin 1.
 If you can't tell which wine it is, set found to false, give your best guess at the style from the name, and list alternatives. Never invent a producer or a wine that doesn't exist.`;
-  try{const r=await sample.json(prompt,{signal:idCtl.signal,images:photo?[photo]:undefined,cache:false});
+  try{const shot=photo?await makeThumb(photo).catch(()=>null):null;
+    const r=await sample.json(prompt,{signal:idCtl.signal,images:photo?[photo]:undefined,cache:false});if(shot)r.img=shot;
     if(!r||!Array.isArray(r.style)||r.style.length!==6)throw {code:'invalid_json'};
     r.style=r.style.map(v=>Math.max(1,Math.min(5,Math.round(Number(v)||3))));r.type=TYPES[r.type]?r.type:'red';
     const inApp=r.name?allWines().find(w=>normW(w.name).includes(normW(r.name))||normW(r.name).includes(normW(w.name))&&normW(w.name).length>8):null;
-    if(inApp){$('idStatus').textContent='That wine is already in the app.';pickWine(inApp);return}
+    if(inApp){if(r.img&&!inApp.img){const u={...inApp,img:r.img};custom[u.id]=u;put('wines',u.id,u)}$('idStatus').textContent='That wine is already in the app.';pickWine(byId(inApp.id));return}
     $('idStatus').textContent='';showIdentified(r)}
   catch(err){$('idStatus').textContent=err?.code==='cancelled'?'':err?.code==='bad_key'?'Anthropic rejected your Claude key. Check it on the More tab.':err?.code==='rate_limited'?'Too many requests just now. Try again in a minute.':'Couldn\'t identify it just now. Try again, or set the style sliders yourself.'}
   finally{$('idBtn').disabled=false}}
 function showIdentified(r){window._idr=r;const conf={high:['Confident',''],medium:['Fairly sure','plain'],low:['Best guess','warn']}[r.confidence]||['Best guess','warn'];
   $('idOut').innerHTML=`<div class="card" style="background:var(--sunk)">
     <span class="label">${r.found===false?'Couldn\'t pin it down. Closest match':'Is this the wine?'}</span>
+    <div class="with-thumb">${r.img?thumb({img:r.img,name:'your photo'},1):''}<div>
     <div class="name">${esc(r.name||$('fName').value)}${r.vintage?' '+r.vintage:''}</div>
-    <div class="meta">${esc([TYPES[r.type],r.grape,r.region,r.price?'about '+gbp(r.price):''].filter(Boolean).join(' · '))}</div>
+    <div class="meta">${esc([TYPES[r.type],r.grape,r.region,r.price?'about '+gbp(r.price):''].filter(Boolean).join(' · '))}</div>${r.img?'':'<div class="meta">No picture of this one yet. Add a label photo to see it here.</div>'}</div></div>
     ${r.note?`<p class="why">${esc(r.note)}</p>`:''}
     <div class="row"><span class="tag ${conf[1]}">${conf[0]}</span></div>
     <div class="row"><button class="primary" type="button" data-idok="1">Yes, that's it</button><button class="btn" type="button" data-idno="1">No</button></div>
