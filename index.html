@@ -447,7 +447,7 @@ function profile(t='red',pid='p1'){
         else if(x==='right')pts[i].push({v,w:1.5});}});}
   const dims=pts.map(p=>{const Wt=p.reduce((s,x)=>s+x.w,0);if(!Wt)return {ideal:3,W:0,sd:2,state:'unknown'};
     const ideal=p.reduce((s,x)=>s+x.w*x.v,0)/Wt;const sd=Math.sqrt(p.reduce((s,x)=>s+x.w*(x.v-ideal)**2,0)/Wt);
-    const state=Wt>=4&&sd<=0.9?'known':Wt>=1.5?'leaning':'unknown';return {ideal,W:Wt,sd,state}});
+    const state=Wt>=4&&sd<=0.9?'known':Wt>=1?'leaning':'unknown';return {ideal,W:Wt,sd,state}});
   return {type:t,pid,dims,n,notes};
 }
 const Pcache={};
@@ -602,7 +602,7 @@ $('noteSave').addEventListener('click',()=>{const id=sheetWine;
   closeNotes();render()});
 $('noteSkip').addEventListener('click',closeNotes);$('noteBg').addEventListener('click',closeNotes);
 
-function setRating(id,s,keepOpen,pid){pid=pid||active()[0];const rs=R(pid);
+function setRating(id,s,keepOpen,pid){pid=pid||active()[0];const rs=R(pid);if(byId(id)&&prefs.ptype!==typeOf(byId(id))){prefs.ptype=typeOf(byId(id));storePrefs()}
   if(rs[id]?.score===s&&!keepOpen){delete rs[id];render();del('ratings',rdoc(pid,id));return}
   rs[id]={...(rs[id]||{}),person:pid,wineId:id,score:s,at:Date.now()};render();put('ratings',rdoc(pid,id),rs[id]);
   if(!keepOpen)openNotes(id,pid);else{notesFor=pid;drawNotes()}}
@@ -667,7 +667,7 @@ $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fNam
   const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
   if(qty>0)rackAdd(w.id,qty,vin);
   closeAdd();$('styleWrap').hidden=false;
-  if(rate!==''){const pid=$('fWho').value||active()[0];R(pid)[w.id]={person:pid,wineId:w.id,score:Number(rate),at:Date.now()};put('ratings',rdoc(pid,w.id),R(pid)[w.id]);render();openNotes(w.id,pid)}
+  if(rate!==''){const pid=$('fWho').value||active()[0];prefs.ptype=typeOf(w);if(who()!=='both')prefs.who=pid;storePrefs();R(pid)[w.id]={person:pid,wineId:w.id,score:Number(rate),at:Date.now()};put('ratings',rdoc(pid,w.id),R(pid)[w.id]);render();openNotes(w.id,pid)}
   else if(who()==='both'&&qty===0){render();openNotes(w.id)}else render()});
 
 /* ---------- food pairing ---------- */
