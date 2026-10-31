@@ -160,17 +160,17 @@ input[type=range]{width:100%;accent-color:var(--wine)}
       <div class="box" id="palate"></div>
     </section>
     <section>
-      <div class="sec-head"><h2>Try next</h2><p>Each bottle answers one open question about your taste. Rate it, and tell it what stood out.</p></div>
+      <div class="sec-head"><h2>Best matches for you</h2><p id="bestSub">The bottles most likely to suit you, highest first.</p></div>
       <div class="box filters"></div>
+      <div id="safe" class="list"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>Try next</h2><p>Bottles you'll probably enjoy that also teach the app something new about your taste. Rate them, and say what stood out. The slider above sets how adventurous these are.</p></div>
       <div id="next" class="list"></div>
     </section>
     <section>
       <div class="sec-head"><h2>Scout report</h2><p id="scoutSub">Each Friday new wines from the shops are added to the app for everyone. Your own picks above are worked out on this phone from your ratings.</p></div>
       <div id="scout" class="list"><div class="empty">The first report arrives Friday 6 November.</div></div>
-    </section>
-    <section>
-      <div class="sec-head"><h2>Reliable picks</h2><p>For nights you just want something you'll enjoy.</p></div>
-      <div id="safe" class="list"></div>
     </section>
   </div>
 
@@ -500,7 +500,7 @@ function predict(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let n
 const fitPct=p=>Math.max(3,Math.min(97,Math.round(50+24*p)));
 const conf=c=>c>.75?'confident':c>.4?'fair guess':'rough guess';
 function question(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let best=-1,D=null;
-  dimsFor(t).forEach(X=>{const d=P.dims[X.i],u=1-Math.min(1,d.W/4);const g=u*(0.4+Math.min(2,Math.abs(w.a[X.i]-d.ideal)));if(g>best){best=g;D=X}});
+  const tried=Object.keys(R(P.pid)).map(byId).filter(o=>o&&typeOf(o)===t&&o.id!==w.id);dimsFor(t).forEach(X=>{const d=P.dims[X.i],unc=1/(1+d.W/3);const nov=tried.length?Math.min(...tried.map(o=>Math.abs(w.a[X.i]-o.a[X.i]))):2;const g=0.6*unc+0.5*Math.min(3,nov);if(g>best){best=g;D=X}});
   const d=P.dims[D.i],up=w.a[D.i]>=d.ideal,noun=TNOUN[t];
   const what=D.k==='Oak'&&t==='sparkling'?'toasty, aged fizz':D.k==='Ripeness'&&t!=='red'?'sweetness':D.k==='Oak'?'oak':D.k.toLowerCase();
   const q=d.state==='unknown'?`How do you feel about ${what} in ${noun}?`:`Do you like ${up?D.up:D.down} ${noun} than your usual?`;
@@ -573,17 +573,21 @@ function renderPalate(t){const Ps=active().map(p=>getP(t,p)),both=Ps.length>1;
   $('palate').innerHTML=Ps.map(P=>palateMap(P,both)).join('<hr style="border:none;border-top:1px solid var(--line);margin:4px 0">')}
 function pool(t){return allWines().filter(w=>typeOf(w)===t&&!ratedByAny(w.id)&&shopOk(w)&&budgetOk(w))}
 function renderNext(P){const a=prefs.adv/100;
-  const sc=pool(P.type).map(w=>{const {pred,cov}=fitFor(w);const q=questionFor(w);
-    return {w,pred,q,s:(0.6+a)*q.info+0.4*(1-cov)+(1.2-a)*pred}}).filter(x=>x.pred>-0.4-0.8*a).sort((x,y)=>y.s-x.s);
+  /* best matches: highest predicted enjoyment for whoever is drinking */
+  const all=pool(P.type).map(w=>({w,...fitFor(w)}));
+  const safe=all.slice().sort((x,y)=>y.pred-x.pred||(x.w.price??99)-(y.w.price??99)).slice(0,5);
+  $('bestSub').textContent=safe.length?`The ${safe.length} ${TNOUN[P.type]} most likely to suit ${who()==='both'?'you both':pname(who())}${prefs.shop==='all'?' across all shops':' at '+prefs.shop}${prefs.budget<999?' up to £'+prefs.budget:''}, highest first.`:'';
+  $('safe').innerHTML=safe.length?safe.map(x=>card(x.w,P)).join(''):'<div class="empty">Nothing matches these filters. Try another shop or a higher budget.</div>';
+  /* try next: likely to please, and informative. "Stay close" weights enjoyment; "Stretch me" weights what it teaches */
+  const ids=new Set(safe.map(x=>x.w.id)),floor=0.25-0.9*a;
+  const sc=all.filter(x=>!ids.has(x.w.id)&&x.pred>floor).map(x=>{const q=questionFor(x.w);
+    return {...x,q,s:(0.4+1.6*a)*q.info+0.3*(1-x.cov)+(1.4-1.2*a)*x.pred}}).sort((x,y)=>y.s-x.s);
   const near=(x,p)=>x.w.a.reduce((s,v,i)=>s+Math.abs(v-p.w.a[i]),0)<=2;
   const pick=[],used=new Set();for(const x of sc){if(pick.length>=3)break;if(used.has(x.q.dim))continue;used.add(x.q.dim);pick.push(x)}
   for(const x of sc){if(pick.length>=3)break;if(!pick.includes(x)&&!pick.some(p=>near(x,p)))pick.push(x)}
   for(const x of sc){if(pick.length>=3)break;if(!pick.includes(x))pick.push(x)}
   $('next').innerHTML=pick.length?pick.map(x=>card(x.w,P,{ex:true,extra:`<div class="q"><b>${esc(x.q.q)}</b><span>Love it: ${esc(x.q.ifLove)}. Not for you: ${esc(x.q.ifNot)}.</span></div>`})).join('')
-   :'<div class="empty">Nothing left to test under these filters. Try another shop or a higher budget.</div>';
-  const ids=new Set(pick.map(x=>x.w.id));
-  const safe=pool(P.type).filter(w=>!ids.has(w.id)).map(w=>({w,...fitFor(w)})).sort((x,y)=>y.pred-x.pred).slice(0,3);
-  $('safe').innerHTML=safe.length?safe.map(x=>card(x.w,P)).join(''):'<div class="empty">Nothing matches these filters.</div>'}
+   :'<div class="empty">Nothing else likely to suit you under these filters. Move the slider towards "Stretch me", or try another shop or budget.</div>'}
 function renderScout(P){if(!scout)return;
   const picks=(Array.isArray(scout.picks)?scout.picks:[]).map(byId).filter(w=>w&&!ratedByAny(w.id));
   $('scoutSub').textContent=scout.date?`Latest report: ${scout.date}`:'Latest report';
