@@ -295,6 +295,7 @@ input[type=range]{width:100%;accent-color:var(--wine)}
         <div id="eSliders" class="list"></div>
         <button class="btn" type="button" id="eSave">Save changes</button>
         <p class="status" id="eMsg" role="status"></p>
+        <button class="btn" type="button" id="eDel" style="color:var(--bad);border-color:var(--bad)">Delete this bottle</button>
       </div>
     </details>
     <div class="row"><button class="primary" type="button" id="noteSave">Save</button><button class="btn" type="button" id="noteSkip">Close</button></div>
@@ -628,7 +629,15 @@ function drawNotes(){const pids=active();$('noteRate').innerHTML=rateRow(sheetWi
 $('eShop').innerHTML=SHOPS.concat(['Other']).map(s=>`<option>${esc(s)}</option>`).join('');
 $('eSliders').innerHTML='<span class="label">Style</span>'+DIMS.map((D,i)=>`<label class="slider" for="es${i}"><span>${D.k}</span><input id="es${i}" type="range" min="1" max="5" step="1" aria-label="${D.k}, ${D.lo} to ${D.hi}"><output id="eo${i}"></output></label>`).join('');
 DIMS.forEach((D,i)=>$('es'+i).addEventListener('input',e=>$('eo'+i).textContent=e.target.value));
-function fillEdit(){const w=byId(sheetWine);if(!w)return;$('editBox').open=false;$('eMsg').textContent='';
+let delArmed=false;
+$('eDel').addEventListener('click',()=>{const id=sheetWine,w=byId(id);if(!w)return;
+  if(!delArmed){delArmed=true;$('eDel').textContent='Tap again to delete';
+    $('eMsg').textContent=`This removes ${w.name} and everyone's ratings and notes for it${Object.values(rack).some(h=>h.wineId===id)?', and takes it off your rack':''}. It can't be undone.`;return}
+  for(const p of PIDS){if(R(p)[id]){delete R(p)[id];del('ratings',rdoc(p,id))}}
+  for(const h of Object.values(rack)){if(h.wineId===id){delete rack[h.id];del('rack',h.id)}}
+  const own=custom[id]&&!CAT.some(c=>c.id===id);if(custom[id]){delete custom[id];del('wines',id)}
+  saveLocal&&saveLocal();closeNotes();render();if(typeof toast==='function')toast(own?'Bottle deleted.':'Removed from your log.');else $('addStatus').textContent=''});
+function fillEdit(){const w=byId(sheetWine);if(!w)return;$('editBox').open=false;$('eMsg').textContent='';delArmed=false;$('eDel').textContent='Delete this bottle';
   $('eName').value=w.name;$('eType').value=typeOf(w);$('eShop').value=SHOPS.includes(w.shop)?w.shop:'Other';$('ePrice').value=w.price??'';
   w.a.forEach((v,i)=>{$('es'+i).value=v;$('eo'+i).textContent=v})}
 $('eSave').addEventListener('click',()=>{const w=byId(sheetWine);if(!w)return;const name=$('eName').value.trim();if(!name){$('eMsg').textContent='The name can\'t be empty.';return}
