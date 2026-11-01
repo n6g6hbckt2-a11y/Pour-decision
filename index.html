@@ -330,6 +330,7 @@ input[type=range]{width:100%;accent-color:var(--wine)}
       <select id="fRate"><option value="">Not yet</option><option value="2">Loved it</option><option value="1">Liked it</option><option value="0">Meh</option><option value="-2">Not again</option></select></label>
     <div id="styleWrap" class="list">
       <span class="label" id="styleLabel">Style, if you know it</span>
+      <div class="row" id="presetRow"></div>
       <div id="fSliders" class="list"></div>
     </div>
     <div class="row"><button class="primary" type="submit">Save</button><button class="btn" type="button" id="addCancel">Cancel</button></div>
@@ -712,12 +713,12 @@ $('fName').addEventListener('change',()=>{const w=picked||allWines().find(x=>nor
     w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});$('styleWrap').hidden=true}else $('styleWrap').hidden=false});
 $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fName').value.trim();if(!name){$('addStatus').textContent='Add the wine\'s name first.';return}
   let w=picked||allWines().find(x=>normW(x.name)===normW(name));
-  if(!w&&!identified&&!slidersTouched&&!warnedUnknown){warnedUnknown=true;
+  if(!w&&!identified&&!guessed&&!slidersTouched&&!warnedUnknown){warnedUnknown=true;
     $('addStatus').textContent=sample?'I don\'t know this bottle yet. Tap "Identify with Claude" (or set the style sliders) so it can teach your palate. Tap Save again to save it anyway.'
       :'I don\'t know this bottle yet. Set the style sliders roughly so it can teach your palate, or tap Save again to save it anyway.';$('idBtn').focus();return}
   if(!w){const id='c-'+Date.now().toString(36);const I=identified||{};
-    w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?(I.price??null):Number($('fPrice').value),region:I.region||'',grape:I.grape||'',
-      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',img:I.img||undefined,source:identified?'lookup':'you',addedAt:Date.now()};
+    w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?(I.price??null):Number($('fPrice').value),region:I.region||'',grape:I.grape||(guessed?guessed.label:''),
+      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',img:I.img||undefined,source:identified?'lookup':guessed?'name':'you',addedAt:Date.now()};
     custom[id]=w;put('wines',id,w)}
   const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
   if(qty>0)rackAdd(w.id,qty,vin);
@@ -730,30 +731,93 @@ $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fNam
 /* small JPEG copy of a label photo, kept with the wine so its picture shows later */
 async function makeThumb(file){const bmp=await createImageBitmap(file);const s=Math.min(1,240/bmp.height,240/bmp.width);
   const c=document.createElement('canvas');c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.72)}
+
+/* ---------- recognise a wine from its name, no Claude needed ---------- */
+/* [keywords (any), label, type, style [Body,Fruit,Oak,Tannin,Freshness,Ripeness]]; checked top to bottom, specific first */
+const GUESS=[
+ [['champagne'],'Champagne','sparkling',[2,2,1,1,5,1]],[['prosecco'],'Prosecco','sparkling',[2,4,1,1,4,2]],[['cava'],'Cava','sparkling',[2,2,1,1,5,1]],
+ [['cremant'],'Crémant','sparkling',[2,3,1,1,5,1]],[['sparkling shiraz'],'Sparkling Shiraz','sparkling',[4,5,1,2,3,3]],[['moscato','asti spumante'],'Moscato','white',[2,5,1,1,3,5]],
+ [['sparkling','brut','fizz','spumante','cap classique'],'Sparkling wine','sparkling',[2,3,1,1,5,1]],
+ [['blush','white zinfandel'],'Blush rosé','rose',[2,4,1,1,3,3]],[['tavel','rosado','cerasuolo'],'Fuller dry rosé','rose',[3,4,1,1,3,1]],
+ [['rose','rosato','pink'],'Rosé','rose',[2,3,1,1,4,1]],
+ [['amarone'],'Amarone','red',[5,4,3,3,2,3]],[['appassimento','passimento'],'Appassimento','red',[4,5,2,2,2,4]],[['ripasso'],'Ripasso','red',[4,4,3,2,3,2]],
+ [['barolo','barbaresco'],'Barolo','red',[4,2,3,5,4,1]],[['nebbiolo'],'Nebbiolo','red',[3,2,2,5,4,1]],[['brunello'],'Brunello','red',[4,3,3,4,4,1]],
+ [['vino nobile','nobile di montepulciano'],'Vino Nobile','red',[4,3,3,3,4,1]],[['primitivo','zinfandel'],'Primitivo','red',[5,5,3,2,2,3]],
+ [['negroamaro','salice salentino'],'Negroamaro','red',[4,3,3,3,2,2]],[['nero d avola'],'Nero d\'Avola','red',[4,4,2,2,3,2]],
+ [['montepulciano'],'Montepulciano','red',[3,4,1,3,3,1]],[['barbera'],'Barbera','red',[3,4,1,2,4,1]],[['aglianico'],'Aglianico','red',[4,3,3,4,3,1]],
+ [['chianti riserva','chianti classico riserva'],'Chianti Riserva','red',[3,3,3,3,4,1]],[['chianti','sangiovese','morellino','toscana','rosso di montalcino'],'Sangiovese','red',[3,3,2,3,4,1]],
+ [['valpolicella','bardolino'],'Valpolicella','red',[2,3,1,2,4,1]],
+ [['gran reserva'],'Rioja Gran Reserva','red',[3,2,4,3,3,1]],[['reserva'],'Rioja Reserva','red',[4,3,4,3,3,1]],[['crianza'],'Crianza','red',[3,3,4,3,3,1]],
+ [['ribera del duero','ribera'],'Ribera del Duero','red',[4,4,3,4,3,1]],[['toro'],'Toro','red',[5,4,3,4,2,2]],[['priorat','montsant'],'Priorat','red',[5,4,3,3,2,2]],
+ [['monastrell','jumilla','mourvedre','yecla','bullas'],'Monastrell','red',[4,5,1,3,2,2]],[['garnacha','grenache','calatayud','borja','carinena'],'Garnacha','red',[4,4,2,2,2,2]],
+ [['mencia','bierzo'],'Mencía','red',[2,3,1,2,4,1]],[['rioja','tempranillo','tinto'],'Tempranillo','red',[3,3,2,3,3,1]],
+ [['chateauneuf'],'Châteauneuf-du-Pape','red',[4,4,2,3,3,2]],[['cotes du rhone','vacqueyras','gigondas','rhone','gsm','costieres'],'Southern Rhône','red',[3,4,1,2,3,1]],
+ [['languedoc','corbieres','minervois','fitou','pays d oc'],'Languedoc red','red',[4,4,2,3,3,1]],
+ [['medoc','pauillac','margaux','haut medoc'],'Left-bank Bordeaux','red',[4,2,3,4,3,1]],[['saint emilion','st emilion','pomerol'],'Right-bank Bordeaux','red',[4,3,3,3,3,1]],
+ [['bordeaux','claret'],'Bordeaux','red',[3,3,2,3,3,1]],[['cahors'],'Cahors Malbec','red',[4,3,2,4,3,1]],[['malbec'],'Malbec','red',[4,4,3,3,3,1]],
+ [['cabernet franc','chinon','bourgueil'],'Cabernet Franc','red',[3,3,2,3,4,1]],[['cabernet','cab sav'],'Cabernet Sauvignon','red',[4,3,3,4,3,1]],
+ [['merlot'],'Merlot','red',[3,4,2,2,3,2]],[['carmenere'],'Carmenère','red',[4,4,2,2,2,1]],[['pinotage'],'Pinotage','red',[4,4,3,3,3,1]],
+ [['shiraz','barossa','mclaren vale'],'Shiraz','red',[5,5,3,3,2,2]],[['durif','petite sirah'],'Durif','red',[5,4,3,4,2,2]],[['syrah','crozes','hermitage','cote rotie'],'Syrah','red',[3,4,2,3,4,1]],
+ [['beaujolais','gamay','fleurie','morgon','brouilly','moulin a vent','julienas'],'Beaujolais','red',[2,4,1,1,4,1]],
+ [['pinot noir','pinot nero','spatburgunder','bourgogne rouge','burgundy red'],'Pinot Noir','red',[2,3,2,1,4,1]],
+ [['douro'],'Douro','red',[4,4,2,3,3,1]],[['dao'],'Dão','red',[3,3,2,3,4,1]],[['alentejo','alentejano'],'Alentejo','red',[4,4,2,2,2,1]],
+ [['xinomavro'],'Xinomavro','red',[3,2,2,4,4,1]],[['touriga'],'Touriga Nacional','red',[4,4,2,3,3,1]],
+ [['chablis'],'Chablis','white',[3,2,1,1,5,1]],[['sancerre','pouilly fume','menetou','touraine sauvignon'],'Loire Sauvignon','white',[2,2,1,1,5,1]],
+ [['marlborough','nz sauvignon','new zealand sauvignon'],'NZ Sauvignon Blanc','white',[2,4,1,1,5,1]],[['sauvignon'],'Sauvignon Blanc','white',[2,3,1,1,5,1]],
+ [['macon','bourgogne blanc','white burgundy','pouilly fuisse'],'White Burgundy','white',[3,3,2,1,4,1]],[['chardonnay'],'Chardonnay','white',[3,4,3,1,3,1]],
+ [['albarino','alvarinho','rias baixas'],'Albariño','white',[2,3,1,1,5,1]],[['picpoul'],'Picpoul','white',[2,2,1,1,5,1]],[['muscadet'],'Muscadet','white',[1,2,1,1,5,1]],
+ [['pinot grigio','pinot gris'],'Pinot Grigio','white',[2,2,1,1,4,1]],[['riesling'],'Riesling','white',[2,3,1,1,5,2]],[['gewurztraminer','gewurz','traminer'],'Gewürztraminer','white',[4,5,1,1,2,3]],
+ [['viognier'],'Viognier','white',[4,4,1,1,2,2]],[['chenin','vouvray','savennieres'],'Chenin Blanc','white',[3,4,1,1,4,1]],[['gruner'],'Grüner Veltliner','white',[2,3,1,1,4,1]],
+ [['verdejo','rueda'],'Verdejo','white',[2,3,1,1,5,1]],[['godello'],'Godello','white',[3,3,1,1,4,1]],[['vermentino'],'Vermentino','white',[2,3,1,1,4,1]],
+ [['gavi','soave','verdicchio','frascati','orvieto','lugana'],'Crisp Italian white','white',[2,2,1,1,4,1]],[['falanghina','greco','fiano','grillo','pecorino'],'Southern Italian white','white',[3,3,1,1,4,1]],
+ [['vinho verde'],'Vinho Verde','white',[1,3,1,1,5,2]],[['assyrtiko'],'Assyrtiko','white',[3,3,1,1,5,1]],[['torrontes'],'Torrontés','white',[2,5,1,1,3,1]],
+ [['semillon'],'Sémillon','white',[3,3,2,1,4,1]],[['rioja blanco','white rioja','viura'],'White Rioja','white',[3,3,2,1,4,1]],
+ [['red','rosso','rouge','tinto'],'Red wine','red',[3,3,2,2,3,1]],[['white','blanco','bianco','blanc','weiss'],'White wine','white',[3,3,1,1,4,1]]];
+function guessWine(name){const n=' '+normW(name)+' ';
+  for(const [keys,label,type,a] of GUESS){if(keys.some(k=>n.includes(' '+k+' ')||n.includes(' '+k)&&k.length>5))return {label,type,a}}return null}
+const PRESETS={red:[['Light & fresh',[2,3,1,1,4,1]],['Smooth & fruity',[3,4,1,2,3,2]],['Rich & oaky',[4,4,4,3,3,2]],['Big & bold',[5,5,3,4,2,2]]],
+  white:[['Crisp & zesty',[2,2,1,1,5,1]],['Aromatic',[3,5,1,1,3,2]],['Rich & creamy',[4,4,4,1,3,1]],['Sweet',[3,5,1,1,3,5]]],
+  rose:[['Pale & dry',[2,3,1,1,4,1]],['Fruity',[3,4,1,1,3,2]],['Sweet',[2,4,1,1,3,4]]],
+  sparkling:[['Crisp & dry',[2,2,1,1,5,1]],['Fruity & soft',[2,4,1,1,4,2]],['Rich & toasty',[3,3,3,1,4,1]]]};
+function drawPresets(){const t=$('fType').value;$('presetRow').innerHTML='<span class="label" style="width:100%">Quick style</span>'+(PRESETS[t]||PRESETS.red).map(([l,a],i)=>`<button class="chip" type="button" data-preset="${i}">${l}</button>`).join('')}
+function setSliders(a){a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v})}
+$('fType').addEventListener('change',drawPresets);
+document.addEventListener('click',e=>{const b=e.target.closest('[data-preset]');if(!b)return;const p=(PRESETS[$('fType').value]||PRESETS.red)[+b.dataset.preset];
+  setSliders(p[1]);slidersTouched=true;$('presetRow').querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',String(c===b)))});
 /* ---------- wine lookup for the 'Log a bottle' sheet ---------- */
-let picked=null, identified=null, slidersTouched=false, warnedUnknown=false, idCtl=null;
+let picked=null, identified=null, slidersTouched=false, warnedUnknown=false, idCtl=null, guessed=null; let autoId=null, lastAuto='';
 const normW=s=>String(s||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
-const STOP=new Set(['the','de','di','del','la','le','du','des','and','wine','vino','red','white','tinto','rosso','blanco','bianco','finest','deluxe','ttd','taste','difference','specially','selected','society','s']);
-function searchWines(q){const qt=normW(q).split(' ').filter(t=>t.length>1&&!STOP.has(t));if(!qt.length)return [];
-  return allWines().map(w=>{const wt=normW(w.name+' '+(w.region||'')).split(' ');let sc=0;
-    for(const t of qt){let b=0;for(const x of wt){if(x===t){b=1;break}if(x.startsWith(t)||t.startsWith(x)&&x.length>3)b=Math.max(b,0.8);else if(x.includes(t)&&t.length>3)b=Math.max(b,0.5)}sc+=b}
-    return {w,s:sc/qt.length}}).filter(x=>x.s>=0.6).sort((a,b)=>b.s-a.s).slice(0,5)}
-function resetLookup(){picked=null;identified=null;slidersTouched=false;warnedUnknown=false;idCtl?.abort();
+const STOP=new Set(['the','de','di','del','la','le','du','des','and','wine','vino','red','white','tinto','rosso','blanco','bianco','finest','deluxe','ttd','taste','difference','specially','selected','s']);
+/* words that describe a style or place, not a particular wine: a match needs more than these */
+let GENERIC=null;
+function genericWords(){if(GENERIC)return GENERIC;GENERIC=new Set('reserve reserva reservado riserva estate vineyard vineyards vines old valley blend cuvee selection classic organic gran grand cru premier superiore classico doc docg aoc igp vin vino wine wines red white rose dry sweet brut extra 2018 2019 2020 2021 2022 2023 2024 2025 2026 france spain italy portugal chile argentina australia africa south new zealand california germany austria england marlborough mendoza barossa'.split(' '));
+  if(typeof GUESS!=='undefined')for(const [keys] of GUESS)for(const k of keys)for(const t of normW(k).split(' '))GENERIC.add(t);return GENERIC}
+function searchWines(q){const G=genericWords();const qt=normW(q).split(' ').filter(t=>t.length>1&&!STOP.has(t));if(!qt.length)return [];
+  const specific=qt.filter(t=>!G.has(t));
+  return allWines().map(w=>{const wt=normW(w.name+' '+(w.region||'')).split(' ');let sc=0,spec=0;
+    for(const t of qt){let b=0;for(const x of wt){if(x===t){b=1;break}if(x.startsWith(t)||t.startsWith(x)&&x.length>3)b=Math.max(b,0.8);else if(x.includes(t)&&t.length>3)b=Math.max(b,0.5)}sc+=b;if(b>=0.8&&!G.has(t))spec++}
+    return {w,s:sc/qt.length,spec}}).filter(x=>x.s>=0.6&&(specific.length?x.spec>=1:true)).sort((a,b)=>b.spec-a.spec||b.s-a.s).slice(0,5)}
+function resetLookup(){clearTimeout(autoId);lastAuto='';picked=null;identified=null;guessed=null;slidersTouched=false;warnedUnknown=false;idCtl?.abort();drawPresets();
   $('matchList').innerHTML='';$('idOut').innerHTML='';$('idStatus').textContent='';$('labelPhoto').value='';
   $('labelWrap').hidden=false;$('idBtn').hidden=false;$('styleWrap').hidden=false;$('styleLabel').textContent='Style, if you know it'}
 function pickWine(w){picked=w;identified=null;$('fName').value=w.name;$('fType').value=typeOf(w);$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';
   $('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});
   $('styleWrap').hidden=true;$('idOut').innerHTML='';$('idStatus').textContent='';
   $('matchList').innerHTML=`<div class="card" style="background:var(--sunk)"><div class="with-thumb">${thumb(w,1)}<div><div class="name">${esc(w.name)}</div><div class="meta">${esc([TYPES[typeOf(w)],w.region,w.shop==='Other'?'':w.shop,gbp(w.price)].filter(Boolean).join(' · '))}</div></div></div>${w.note?`<p class="why">${esc(w.note)}</p>`:''}<div class="row"><span class="tag">Found in the app</span><button class="btn" type="button" data-unpick="1" style="min-height:36px">Not this one</button></div></div>`}
-function showMatches(){const q=$('fName').value;picked=null;identified=null;warnedUnknown=false;$('styleWrap').hidden=false;$('idOut').innerHTML='';
+function showMatches(){const q=$('fName').value;picked=null;identified=null;guessed=null;warnedUnknown=false;$('styleWrap').hidden=false;$('idOut').innerHTML='';
   if(q.trim().length<3){$('matchList').innerHTML='';return}
   const m=searchWines(q);
-  $('matchList').innerHTML=m.length?`<span class="label">Is it one of these?</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div class="with-thumb">${thumb(x.w)}<div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div></div><span class="tag plain">Pick</span></button>`).join('')
-    :`<p class="meta" style="margin:0">Not in the app's list yet.${sample?' Tap "Identify with Claude" and it will work out what it is.':''}</p>`}
+  $('matchList').innerHTML=m.length?`<span class="label">Is it one of these? Tap it if so</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div class="with-thumb">${thumb(x.w)}<div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div></div><span class="tag plain">Pick</span></button>`).join('')+(guessWine(q)?guessHTML(q):'')
+    :guessHTML(q);
+  clearTimeout(autoId);if(!m.length&&sample&&q.trim().length>=4&&q.trim()!==lastAuto){autoId=setTimeout(()=>{lastAuto=q.trim();identify()},1300)}}
+function guessHTML(q){const g=guessWine(q);
+  if(!g)return `<p class="meta" style="margin:0">Not in the app's list, and the name doesn't say the grape or region.${sample?' Looking it up with Claude… or pick':' Pick'} the type and a quick style below.</p>`;
+  if(!slidersTouched){$('fType').value=g.type;drawPresets();setSliders(g.a);guessed=g}
+  return `<div class="card" style="background:var(--sunk)"><span class="label">Recognised from the name</span><div class="name">${esc(g.label)}</div><div class="meta">${TYPES[g.type]}. I've filled in its usual style below; adjust it if this bottle is different.</div>${sample?'<p class="meta" style="margin:0">Looking up the exact wine with Claude…</p>':''}</div>`}
 let mt=null;$('fName').addEventListener('input',()=>{clearTimeout(mt);mt=setTimeout(showMatches,180)});
 $('fSliders').addEventListener('input',()=>{slidersTouched=true});
 $('labelPhoto').addEventListener('change',()=>{if($('labelPhoto').files?.[0]){$('idStatus').textContent='Label photo ready.';identify()}});
-$('idBtn').addEventListener('click',()=>identify());
+$('idBtn').addEventListener('click',()=>{clearTimeout(autoId);identify()});
 async function identify(text){
   if(!sample){if(typeof needKey==='function'){needKey('idStatus','Looking up unknown bottles uses Claude, so it needs your Claude API key first.');return}$('idStatus').textContent='Looking up unknown bottles needs Claude, which isn\'t available here. Set the style sliders instead.';return}
   const name=(text||$('fName').value).trim(),photo=$('labelPhoto').files?.[0];
