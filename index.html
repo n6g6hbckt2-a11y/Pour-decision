@@ -164,6 +164,10 @@ input[type=range]{width:100%;accent-color:var(--wine)}
       <div class="box filters"></div>
       <div id="safe" class="list"></div>
     </section>
+    <section id="stepSec" hidden>
+      <div class="sec-head"><h2>Step up</h2><p>One rung up the quality ladder from bottles you've enjoyed, in a similar style. Rate them to find out whether trading up is worth it to you.</p></div>
+      <div id="stepup" class="list"></div>
+    </section>
     <section>
       <div class="sec-head"><h2>Try next</h2><p>Bottles you'll probably enjoy that also teach the app something new about your taste. Rate them, and say what stood out. The slider above sets how adventurous these are.</p></div>
       <div id="next" class="list"></div>
@@ -291,6 +295,7 @@ input[type=range]{width:100%;accent-color:var(--wine)}
           <label class="field" for="eType">Type<select id="eType"><option value="red">Red</option><option value="white">White</option><option value="rose">Rosé</option><option value="sparkling">Sparkling</option></select></label>
           <label class="field" for="eShop">Where from<select id="eShop"></select></label>
         </div>
+        <label class="field" for="eQ">Quality level<select id="eQ"><option value="">Work it out</option><option value="1">Everyday</option><option value="1.5">Everyday+</option><option value="2">Good</option><option value="2.5">Good+</option><option value="3">Premium</option><option value="3.5">Premium+</option><option value="4">Fine</option></select></label>
         <label class="field" for="ePrice">Price (£)<input id="ePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
         <div id="eSliders" class="list"></div>
         <button class="btn" type="button" id="eSave">Save changes</button>
@@ -399,8 +404,69 @@ const CAT=[
  W('w-sabina','Sabina Tempranillo 2025','Wine Society',7.95,'Navarra',[2,3,1,2,3,1],'Easy-drinking and light.')
 ];
 
+/* known levels for built-in wines whose name doesn't show it */
+[['sanmarzano-60',3],['mucho-mas',1.5]].forEach(([id,q])=>{const w=CAT.find(x=>x.id===id);if(w)w.q=q});
 /* label pictures for built-in wines (Open Food Facts) */
 [['mucho-mas','https://images.openfoodfacts.org/images/products/841/070/206/3043/front_es.3.400.jpg'],['t-kadette','https://images.openfoodfacts.org/images/products/600/980/116/7039/front_fr.7.400.jpg']].forEach(([id,u])=>{const w=CAT.find(x=>x.id===id);if(w)w.img=u});
+
+/* ---------- quality levels and vintages ---------- */
+/* 1 Everyday · 2 Good · 3 Premium · 4 Fine, in half steps. From the appellation ladder, blended with price when known. */
+const QLAB={1:'Everyday',1.5:'Everyday+',2:'Good',2.5:'Good+',3:'Premium',3.5:'Premium+',4:'Fine'};
+const QLADDER=[ /* checked top to bottom: specific before general */
+ [['saint emilion grand cru classe','st emilion grand cru classe','grand cru classe','premier grand cru','cru classe','grands crus classes'],4],
+ [['saint emilion grand cru','st emilion grand cru'],3],
+ [['grand cru'],4],
+ [['pauillac','margaux','saint julien','st julien','saint estephe','st estephe','pessac','pomerol','barolo','barbaresco','brunello','amarone','gran reserva','gran selezione','chateauneuf','hermitage','cote rotie','premier cru','1er cru','priorat','meursault','puligny','chassagne','gevrey','vosne','pommard','volnay'],3],
+ [['haut medoc','reserva','riserva','gigondas','vacqueyras','vino nobile','champagne','sancerre','pouilly fume','ribera del duero','toro','listrac','moulis','fronsac','lalande','cornas','saint joseph','st joseph'],2.5],
+ [['medoc','cotes de bordeaux','castillon','cotes de bourg','blaye','chianti classico','ripasso','chablis','crozes','langhe','macon villages','cotes du rhone villages','rasteau','cairanne','morgon','fleurie','moulin a vent','rioja reserva','beaune','pouilly fuisse'],2],
+ [['bordeaux superieur','crianza','chianti','valpolicella','cremant','bourgogne','beaujolais villages','montepulciano d abruzzo','minervois','corbieres','languedoc','douro','dao','alentejo','barossa','mclaren vale','coonawarra','marlborough','mendoza'],1.5],
+ [['bordeaux','cotes du rhone','joven','prosecco','cava','vin de france','pays d oc','igp','vineyard','smooth','house','table wine','beaujolais'],1]];
+function ladderTier(w){const n=' '+normW((w.name||'')+' '+(w.region||''))+' ';for(const [keys,q] of QLADDER)if(keys.some(k=>n.includes(' '+k+' ')))return q;return null}
+const priceTier=p=>p==null||p===''||isNaN(p)?null:p<7?1:p<10?1.5:p<14?2:p<20?2.5:p<35?3:p<60?3.5:4;
+function qualityOf(w){if(!w)return 1.5;if(typeof w.q==='number')return w.q;const ap=ladderTier(w),pr=priceTier(w.price==null?null:Number(w.price));
+  if(ap&&pr)return Math.round((0.6*ap+0.4*pr)*2)/2;return ap||pr||1.5}
+const qLabel=q=>QLAB[Math.round(q*2)/2]||'Good';
+/* good value: its level (from the ladder or Claude) is at least half a step above what its price usually buys */
+function goodValue(w){const lvl=typeof w.q==='number'?w.q:ladderTier(w),pr=priceTier(w.price==null?null:Number(w.price));return lvl&&pr&&lvl-pr>=0.5}
+const qTag=w=>`<span class="tag plain">${qLabel(qualityOf(w))}</span>`;
+const vTag=w=>goodValue(w)?'<span class="tag">Good value</span>':'';
+/* vintage character by region. cool = lighter and fresher; warm/hot = riper and fuller */
+const VREG=[[['bordeaux','medoc','margaux','pauillac','saint emilion','st emilion','pomerol','graves','pessac','claret','cotes de bourg','castillon','blaye','entre deux mers','fronsac'],'Bordeaux',{2015:'warm',2016:'classic',2017:'cool',2018:'warm',2019:'warm',2020:'warm',2021:'cool',2022:'hot',2023:'classic',2024:'cool',2025:'warm'}],
+ [['bourgogne','burgundy','chablis','macon','beaune','nuits','meursault','pommard','volnay','gevrey','beaujolais','fleurie','morgon','pouilly fuisse'],'Burgundy',{2017:'classic',2018:'warm',2019:'warm',2020:'warm',2021:'cool',2022:'warm',2023:'classic',2024:'cool'}],
+ [['rhone','chateauneuf','gigondas','vacqueyras','crozes','hermitage','cote rotie','ventoux','costieres','rasteau','cairanne','luberon'],'the Rhône',{2017:'warm',2018:'warm',2019:'warm',2020:'warm',2021:'cool',2022:'hot',2023:'warm',2024:'cool'}],
+ [['loire','sancerre','pouilly fume','chinon','muscadet','vouvray','touraine','saumur','anjou','bourgueil'],'the Loire',{2018:'warm',2019:'warm',2020:'warm',2021:'cool',2022:'warm',2023:'classic',2024:'cool'}],
+ [['rioja','ribera','navarra','toro'],'northern Spain',{2018:'classic',2019:'warm',2020:'classic',2021:'classic',2022:'hot',2023:'warm'}],
+ [['chianti','toscana','tuscany','brunello','montalcino','vino nobile','bolgheri','barolo','barbaresco','langhe','piedmont','piemonte'],'central and northern Italy',{2018:'classic',2019:'classic',2020:'warm',2021:'classic',2022:'hot',2023:'warm'}]];
+const VADJ={cool:[-0.5,-0.5,0,0,0.5,-0.5],warm:[0.3,0.3,0,0,-0.3,0.3],hot:[0.6,0.6,0,0,-0.6,0.5],classic:[0,0,0,0,0,0]};
+function vintageInfo(name,region,yr){yr=yr||yearOf(name);if(!yr)return null;const n=' '+normW((name||'')+' '+(region||''))+' ';
+  for(const [keys,label,yrs] of VREG)if(keys.some(k=>n.includes(' '+k+' '))){const c=yrs[yr];if(!c)return null;
+    return {c,yr,label,note:c==='cool'?`${yr} was a cool year in ${label}, so expect it lighter and fresher than usual.`:c==='hot'?`${yr} was a hot year in ${label}, so expect it riper and fuller than usual.`:c==='warm'?`${yr} was a warm year in ${label}: ripe and generous.`:`${yr} was a classic, balanced year in ${label}.`}}return null}
+function vintageAdjust(a,vi){if(!vi)return a;const d=VADJ[vi.c];return a.map((v,i)=>Math.max(1,Math.min(5,Math.round((v+d[i])*2)/2)))}
+/* applied once to listed wines that carry a vintage in their name */
+function prepWine(w){if(!w||w._p||!Array.isArray(w.a))return w;try{const vi=vintageInfo(w.name,w.region);if(vi){w.a=vintageAdjust(w.a,vi);w.vnote=vi.note}w._p=1}catch(e){}return w}
+/* does trading up pay off for this person? least-squares slope of rating on quality level */
+function qualityStats(t,pid){const k='q|'+t+'|'+pid;if(Pcache[k])return Pcache[k];
+  const pts=Object.entries(R(pid)).map(([id,r])=>({w:byId(id),s:r.score})).filter(x=>x.w&&typeOf(x.w)===t).map(x=>({q:qualityOf(x.w),s:x.s}));
+  const n=pts.length,mq=n?pts.reduce((a,x)=>a+x.q,0)/n:2,ms=n?pts.reduce((a,x)=>a+x.s,0)/n:0,vq=n?pts.reduce((a,x)=>a+(x.q-mq)**2,0)/n:0;
+  const slope=n>=3&&vq>0.06?pts.reduce((a,x)=>a+(x.q-mq)*(x.s-ms),0)/n/vq:0;
+  const liked=pts.filter(x=>x.s>0),lq=liked.length?liked.reduce((a,x)=>a+x.q,0)/liked.length:null;
+  return Pcache[k]={n,mq,slope,lq}}
+function qAdj(w,P){const st=qualityStats(typeOf(w),P.pid);if(!st.slope)return 0;return Math.max(-0.5,Math.min(0.5,st.slope*(qualityOf(w)-st.mq)*0.4))}
+function qualityLine(P){const st=qualityStats(P.type,P.pid);if(st.lq==null)return '';
+  const trade=st.n<3?'':st.slope>0.35?' Trading up has paid off for you so far.':st.slope<-0.25?' Pricier bottles haven\'t impressed you more so far.':' Pricier bottles haven\'t made much difference so far.';
+  return `<div><strong>Quality:</strong> your favourites sit around ${qLabel(Math.round(st.lq*2)/2)}.${trade}</div>`}
+/* step up: one rung above bottles you loved, in a similar style */
+function renderStepUp(P){const sec=$('stepSec');if(!sec)return;const t=P.type,pids=active();
+  const loved=pids.flatMap(p=>Object.entries(R(p)).filter(([,r])=>r.score>=1).map(([id,r])=>({w:byId(id),s:r.score,at:r.at||0}))).filter(x=>x.w&&typeOf(x.w)===t)
+    .sort((a,b)=>b.s-a.s||b.at-a.at).slice(0,4);
+  const used=new Set(),out=[];
+  for(const L of loved){const lq=qualityOf(L.w);let best=null;
+    for(const c of allWines()){if(used.has(c.id)||typeOf(c)!==t||ratedByAny(c.id)||!shopOk(c)||!budgetOk(c))continue;const cq=qualityOf(c);if(cq<lq+0.5)continue;
+      const si=sim(c.a,L.w.a,t);if(si<0.6)continue;const same=c.region&&L.w.region&&normW(c.region)===normW(L.w.region)?0.35:0;const sc=si*0.6+same+fitFor(c).pred*0.3-(cq-lq-0.5)*0.15;if(!best||sc>best.sc)best={c,sc,lq,cq}}
+    if(best){used.add(best.c.id);out.push({...best,L:L.w})}if(out.length>=3)break}
+  sec.hidden=!out.length;
+  $('stepup').innerHTML=out.map(x=>card(x.c,P,{extra:`<div class="q"><b>One rung up from ${esc(x.L.name)}</b><span>${qLabel(x.lq)} → ${qLabel(x.cq)}. A similar style, made with more care.</span></div>`})).join('')}
+
 const RATES=[[2,'Loved'],[1,'Liked'],[0,'Meh'],[-2,'Not again']];
 /* Food rules: types in order of preference; t = ideal style [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (null = doesn't matter).
    Checked top to bottom, so specific dishes come before general ones. */
@@ -497,7 +563,7 @@ function predict(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let n
   for(const [id,r] of Object.entries(R(P.pid))){if(id===w.id)continue;const o=byId(id);if(!o||typeOf(o)!==t)continue;const k=sim(w.a,o.a,t);num+=r.score*k;den+=k}
   const p=num/(den+0.35), cov=1-Math.exp(-den*1.2);
   let cs=0,fs=0;dimsFor(t).forEach(D=>{const d=P.dims[D.i],c=Math.min(1,d.W/4);cs+=c;fs+=c*(1-Math.abs(w.a[D.i]-d.ideal)/1.5)});
-  const pred=cs>0?0.6*p+0.7*(fs/cs):p;return {pred,cov}}
+  const pred=(cs>0?0.6*p+0.7*(fs/cs):p)+qAdj(w,P);return {pred,cov}}
 const fitPct=p=>Math.max(3,Math.min(97,Math.round(50+24*p)));
 const conf=c=>c>.75?'confident':c>.4?'fair guess':'rough guess';
 function question(w,P){const t=typeOf(w);if(!P||P.type!==t)P=getP(t,P?.pid);let best=-1,D=null;
@@ -533,8 +599,9 @@ function fitHTML(w,label){const f=fitFor(w);
   return `<div class="fit"><span class="n">${fitPct(f.pred)}%</span><span class="c">${f.each?esc(`${pname('p1')} ${fitPct(f.each.p1)} · ${pname('p2')} ${fitPct(f.each.p2)}`):label||conf(f.cov)}</span></div>`}
 function card(w,P,opts={}){const inRack=Object.values(rack).some(h=>h.wineId===w.id);
   return `<article class="card${opts.ex?' ex':''}"><div class="top"><div class="with-thumb">${thumb(w)}<div><div class="name">${esc(w.name)}</div>
-   <div class="meta">${esc([w.region,w.shop==='Other'?'':w.shop,gbp(w.price)||(w.shop==='Other'?'':'price: check shelf')].filter(Boolean).join(' · '))}</div></div></div>
-   ${fitHTML(w)}</div>
+   <div class="meta">${esc([w.region,w.shop==='Other'?'':w.shop,gbp(w.price)||(w.shop==='Other'?'':'price: check shelf')].filter(Boolean).join(' · '))}</div>
+   <div class="row" style="gap:4px;margin-top:4px">${qTag(w)}${vTag(w)}</div></div></div>
+   ${fitHTML(w)}</div>${w.vnote?`<p class="meta" style="margin:0">${esc(w.vnote)}</p>`:''}
    ${w.source==='scout'?`<span class="tag ${w.lane==='explore'?'ex':''}" style="align-self:flex-start">${(w.lane==='explore'?'Scout: explore':w.lane==='shared'?'Scout: for you both':'Scout: step up')+(w.forPerson&&w.forPerson!=='both'?' · for '+esc(pname(w.forPerson)):'')}</span>`:''}
    ${w.note?`<p class="why">${esc(w.note)}</p>`:''}${opts.extra||''}${rateRow(w.id)}
    <div class="actions"><button class="btn" type="button" data-rack-add="${esc(w.id)}">${inRack?'+1 in rack':'Add to rack'}</button></div></article>`}
@@ -566,7 +633,7 @@ function palateMap(P,showName){const t=P.type,noun=TNOUN[t],nm=pname(P.pid),you=
       <div class="dot${d.state==='unknown'?' faint':''}" style="left:${pos}%"></div></div>
       <div class="ends"><span>${D.lo}</span><span>${D.hi}</span></div></div><span class="state ${d.state}">${lab}</span></div>`}).join('')+
    `<div class="learned"><div><strong>${esc(you)} like${showName?'s':''}:</strong> ${known.length?esc(known.join(', ')):'not clear yet'}</div>
-    <div><strong>Still testing:</strong> ${open.length?esc([...new Set(open)].join(', ')):'nothing major. Rate the scout picks to fine-tune.'}</div></div>`}
+    <div><strong>Still testing:</strong> ${open.length?esc([...new Set(open)].join(', ')):'nothing major. Rate the scout picks to fine-tune.'}</div>${qualityLine(P)}</div>`}
 function renderPalate(t){const Ps=active().map(p=>getP(t,p)),both=Ps.length>1;
   const n=Ps.reduce((s,P)=>s+P.n,0),notes=Ps.reduce((s,P)=>s+P.notes,0);
   $('palateSub').textContent=!loaded?'Loading your ratings…':both?`${TYPES[t]}: ${Ps.map(P=>`${pname(P.pid)} ${P.n} rated`).join(', ')}. Picks below suit you both.`
@@ -578,6 +645,7 @@ function renderNext(P){const a=prefs.adv/100;
   const all=pool(P.type).map(w=>({w,...fitFor(w)}));
   const safe=all.slice().sort((x,y)=>y.pred-x.pred||(x.w.price??99)-(y.w.price??99)).slice(0,5);
   $('bestSub').textContent=safe.length?`The ${safe.length} ${TNOUN[P.type]} most likely to suit ${who()==='both'?'you both':pname(who())}${prefs.shop==='all'?' across all shops':' at '+prefs.shop}${prefs.budget<999?' up to £'+prefs.budget:''}, highest first.`:'';
+  renderStepUp(P);
   $('safe').innerHTML=safe.length?safe.map(x=>card(x.w,P)).join(''):'<div class="empty">Nothing matches these filters. Try another shop or a higher budget.</div>';
   /* try next: likely to please, and informative. "Stay close" weights enjoyment; "Stretch me" weights what it teaches */
   const ids=new Set(safe.map(x=>x.w.id)),floor=0.25-0.9*a;
@@ -644,9 +712,9 @@ $('eDel').addEventListener('click',()=>{const id=sheetWine,w=byId(id);if(!w)retu
   saveLocal&&saveLocal();closeNotes();render();if(typeof toast==='function')toast(own?'Bottle deleted.':'Removed from your log.');else $('addStatus').textContent=''});
 function fillEdit(){const w=byId(sheetWine);if(!w)return;$('editBox').open=false;$('eMsg').textContent='';delArmed=false;$('eDel').textContent='Delete this bottle';
   $('eName').value=w.name;$('eType').value=typeOf(w);$('eShop').value=SHOPS.includes(w.shop)?w.shop:'Other';$('ePrice').value=w.price??'';
-  w.a.forEach((v,i)=>{$('es'+i).value=v;$('eo'+i).textContent=v})}
+  w.a.forEach((v,i)=>{$('es'+i).value=v;$('eo'+i).textContent=v});$('eQ').value=typeof w.q==='number'?String(w.q):''}
 $('eSave').addEventListener('click',()=>{const w=byId(sheetWine);if(!w)return;const name=$('eName').value.trim();if(!name){$('eMsg').textContent='The name can\'t be empty.';return}
-  const upd={...w,name,type:$('eType').value,shop:$('eShop').value,price:$('ePrice').value===''?null:Number($('ePrice').value),a:DIMS.map((D,i)=>Number($('es'+i).value)),editedAt:Date.now()};
+  const upd={...w,name,type:$('eType').value,shop:$('eShop').value,price:$('ePrice').value===''?null:Number($('ePrice').value),a:DIMS.map((D,i)=>Number($('es'+i).value)),editedAt:Date.now()};if($('eQ').value)upd.q=Number($('eQ').value);else delete upd.q;
   custom[w.id]=upd;put('wines',w.id,upd);$('noteTitle').textContent=name;$('eMsg').textContent='Saved. Your palate now uses these details.';render();drawNotes()});
 function closeNotes(){$('noteBg').hidden=true;$('noteSheet').hidden=true;sheetWine=null}
 $('noteSave').addEventListener('click',()=>{const id=sheetWine;
@@ -718,7 +786,7 @@ $('addForm').addEventListener('submit',e=>{e.preventDefault();const name=$('fNam
       :'I don\'t know this bottle yet. Set the style sliders roughly so it can teach your palate, or tap Save again to save it anyway.';$('idBtn').focus();return}
   if(!w){const id='c-'+Date.now().toString(36);const I=identified||{};
     w={id,name,type:$('fType').value,shop:$('fShop').value,price:$('fPrice').value===''?(I.price??null):Number($('fPrice').value),region:I.region||'',grape:I.grape||(guessed?guessed.label:''),
-      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',img:I.img||undefined,source:identified?'lookup':guessed?'name':'you',addedAt:Date.now()};
+      a:DIMS.map((D,i)=>Number($('fs'+i).value)),note:I.note||'',img:I.img||undefined,q:typeof I.q==='number'?I.q:undefined,vnote:(guessed&&guessed.vnote)||undefined,tier:I.tier||undefined,source:identified?'lookup':guessed?'name':'you',addedAt:Date.now()};
     custom[id]=w;put('wines',id,w)}
   const qty=Math.max(0,Number($('fQty').value)||0),vin=$('fVintage').value?Number($('fVintage').value):null,rate=$('fRate').value;
   if(qty>0)rackAdd(w.id,qty,vin);
@@ -813,8 +881,9 @@ function showMatches(){const q=$('fName').value;picked=null;identified=null;gues
   clearTimeout(autoId);if(!m.length&&sample&&q.trim().length>=4&&q.trim()!==lastAuto){autoId=setTimeout(()=>{lastAuto=q.trim();identify()},1300)}}
 function guessHTML(q){const g=guessWine(q);const yr=yearOf(q);if(yr&&!$('fVintage').value)$('fVintage').value=yr;
   if(!g)return `<p class="meta" style="margin:0">Not in the app's list, and the name doesn't say the grape or region.${sample?' Looking it up with Claude… or pick':' Pick'} the type and a quick style below.</p>`;
-  if(!slidersTouched){$('fType').value=g.type;drawPresets();setSliders(g.a);guessed=g}
-  return `<div class="card" style="background:var(--sunk)"><span class="label">Recognised from the name</span><div class="name">${esc(g.label)}</div><div class="meta">${TYPES[g.type]}. I've filled in its usual style below; adjust it if this bottle is different.</div>${sample?'<p class="meta" style="margin:0">Looking up the exact wine with Claude…</p>':''}</div>`}
+  const vi=vintageInfo(q,'',yr||Number($('fVintage').value)||null),a=vintageAdjust(g.a,vi),ql=qualityOf({name:q,price:$('fPrice').value===''?null:Number($('fPrice').value)});
+  if(!slidersTouched){$('fType').value=g.type;drawPresets();setSliders(a);guessed={...g,a,vnote:vi?.note}}
+  return `<div class="card" style="background:var(--sunk)"><span class="label">Recognised from the name</span><div class="name">${esc(g.label)}</div><div class="row" style="gap:4px"><span class="tag plain">${qLabel(ql)}</span></div><div class="meta">${TYPES[g.type]}. I've filled in its usual style below${vi?', adjusted for the vintage':''}; adjust it if this bottle is different.</div>${vi?`<p class="meta" style="margin:0">${esc(vi.note)}</p>`:''}${sample?'<p class="meta" style="margin:0">Looking up the exact wine with Claude…</p>':''}</div>`}
 let mt=null;$('fName').addEventListener('input',()=>{clearTimeout(mt);mt=setTimeout(showMatches,180)});
 $('fSliders').addEventListener('input',()=>{slidersTouched=true});
 $('labelPhoto').addEventListener('change',()=>{if($('labelPhoto').files?.[0]){$('idStatus').textContent='Label photo ready.';identify()}});
@@ -826,7 +895,7 @@ async function identify(text){
   idCtl?.abort();idCtl=new AbortController();$('idBtn').disabled=true;$('idStatus').textContent='Working out which wine this is…';$('idOut').innerHTML='';
   const prompt=`Identify a wine for a UK wine-tasting app.${name?` The person typed: "${name.slice(0,120)}".`:''}${$('fVintage').value?` Vintage: ${$('fVintage').value}.`:''}${$('fShop').value&&$('fShop').value!=='Other'?` Bought at: ${$('fShop').value}.`:''}${photo?' A photo of the label is attached; read the producer, wine name, region and vintage from it.':''}
 The typed name may be misspelt, partial or a nickname (e.g. "mucho mas" is Mucho Más Tinto). Work out the specific wine most likely meant, ideally one sold in the UK.
-Reply with only JSON: {"found": true or false, "name": "producer and wine name as on the label, without vintage", "vintage": number or null, "type": "red"|"white"|"rose"|"sparkling", "grape": "main grape(s)", "region": "region, country", "style": [Body, Fruit, Oak, Tannin, Freshness, Ripeness], "price": typical UK retail price per 75cl in GBP or null, "note": "one plain sentence on how it tastes", "confidence": "high"|"medium"|"low", "alternatives": ["up to 3 other specific wines it might be"]}.
+Reply with only JSON: {"found": true or false, "name": "producer and wine name as on the label, without vintage", "vintage": number or null, "type": "red"|"white"|"rose"|"sparkling", "grape": "main grape(s)", "region": "region, country", "style": [Body, Fruit, Oak, Tannin, Freshness, Ripeness], "price": typical UK retail price per 75cl in GBP or null, "note": "one plain sentence on how it tastes", "quality": 1-4 in half steps (1 everyday supermarket level, 2 good, 3 premium such as a top village, Reserva or Gran Reserva, 4 fine such as a classed growth or grand cru), "tier": "one short phrase on where it sits in its region's ladder, e.g. one step above basic Bordeaux", "confidence": "high"|"medium"|"low", "alternatives": ["up to 3 other specific wines it might be"]}.
 Style scales are 1-5. Reds: light-full, savoury-jammy, unoaked-vanilla oak, silky-grippy, soft-crisp, dry-sweet/ripe. Whites, rosés and sparkling: Fruit citrus/mineral to ripe/tropical, Oak unoaked to oaky/creamy (sparkling: fresh to toasty), Freshness soft to zesty, Ripeness bone dry to sweet, Tannin 1.
 If you can't tell which wine it is, set found to false, give your best guess at the style from the name, and list alternatives. Never invent a producer or a wine that doesn't exist.`;
   try{const shot=photo?await makeThumb(photo).catch(()=>null):null;
@@ -845,10 +914,11 @@ function showIdentified(r){window._idr=r;const conf={high:['Confident',''],mediu
     <div class="name">${esc(r.name||$('fName').value)}${r.vintage?' '+r.vintage:''}</div>
     <div class="meta">${esc([TYPES[r.type],r.grape,r.region,r.price?'about '+gbp(r.price):''].filter(Boolean).join(' · '))}</div>${r.img?'':'<div class="meta">No picture of this one yet. Add a label photo to see it here.</div>'}</div></div>
     ${r.note?`<p class="why">${esc(r.note)}</p>`:''}
+    ${typeof r.quality==='number'?`<p class="meta" style="margin:0"><strong>${qLabel(Math.round(r.quality*2)/2)}</strong>${r.tier?': '+esc(r.tier):''}</p>`:''}
     <div class="row"><span class="tag ${conf[1]}">${conf[0]}</span></div>
     <div class="row"><button class="primary" type="button" data-idok="1">Yes, that's it</button><button class="btn" type="button" data-idno="1">No</button></div>
     ${(r.alternatives||[]).length?`<div class="list"><span class="label">Or is it…</span>${r.alternatives.slice(0,3).map(a=>`<button class="btn" type="button" data-idalt="${esc(a)}" style="text-align:left">${esc(a)}</button>`).join('')}</div>`:''}</div>`}
-function acceptIdentified(){const r=window._idr;if(!r)return;identified=r;picked=null;
+function acceptIdentified(){const r=window._idr;if(!r)return;identified=r;picked=null;if(typeof r.quality==='number')r.q=Math.max(1,Math.min(4,Math.round(r.quality*2)/2));
   if(r.name)$('fName').value=r.name+(r.vintage?' '+r.vintage:'');$('fType').value=r.type;if($('fPrice').value===''&&r.price)$('fPrice').value=r.price;if(r.vintage&&!$('fVintage').value)$('fVintage').value=r.vintage;
   r.style.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});$('styleWrap').hidden=false;$('styleLabel').textContent='Style, from Claude. Adjust if you like';
   $('matchList').innerHTML='';$('idOut').innerHTML=`<p class="status" style="margin:0">Got it: ${esc(r.name||'')}. Now choose your rating and save.</p>`}
@@ -1026,9 +1096,10 @@ $('namesForm').addEventListener('submit',e=>{e.preventDefault();
   $('namesForm').hidden=true;$('namesHint').hidden=true;$('namesBtn').setAttribute('aria-expanded','false');
   if(db)db.doc('settings/people').set({people}).catch(()=>{});else saveLocal();render()});
 showTab();render();
+CAT.forEach(prepWine);
 fetch('catalog.json').then(r=>r.ok?r.json():[]).then(list=>{if(!Array.isArray(list))return;
   const norm=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g,'');const have=new Set(CAT.map(w=>norm(w.name)));
-  for(const w of list){if(w&&w.id&&Array.isArray(w.a)&&!have.has(norm(w.name))){CAT.push(w);have.add(norm(w.name))}}render()}).catch(()=>{});
+  for(const w of list){if(w&&w.id&&Array.isArray(w.a)&&!have.has(norm(w.name))){CAT.push(prepWine(w));have.add(norm(w.name))}}render()}).catch(()=>{});
 /* ---------- Claude, through the person's own API key (stored only on this phone) ---------- */
 const KEYSTORE='pd-claude-key', MODELS={default:'claude-sonnet-5-5',complex:'claude-sonnet-5-5',quick:'claude-haiku-5-5'};
 const getKey=()=>{try{return localStorage.getItem(KEYSTORE)||''}catch(e){return ''}};
