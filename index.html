@@ -754,6 +754,7 @@ const GUESS=[
  [['chateauneuf'],'Châteauneuf-du-Pape','red',[4,4,2,3,3,2]],[['cotes du rhone','vacqueyras','gigondas','rhone','gsm','costieres'],'Southern Rhône','red',[3,4,1,2,3,1]],
  [['languedoc','corbieres','minervois','fitou','pays d oc'],'Languedoc red','red',[4,4,2,3,3,1]],
  [['medoc','pauillac','margaux','haut medoc'],'Left-bank Bordeaux','red',[4,2,3,4,3,1]],[['saint emilion','st emilion','pomerol'],'Right-bank Bordeaux','red',[4,3,3,3,3,1]],
+ [['bordeaux superieur'],'Bordeaux Supérieur','red',[3,3,2,3,3,1]],[['bordeaux blanc','entre deux mers','graves blanc'],'White Bordeaux','white',[3,3,1,1,4,1]],
  [['bordeaux','claret'],'Bordeaux','red',[3,3,2,3,3,1]],[['cahors'],'Cahors Malbec','red',[4,3,2,4,3,1]],[['malbec'],'Malbec','red',[4,4,3,3,3,1]],
  [['cabernet franc','chinon','bourgueil'],'Cabernet Franc','red',[3,3,2,3,4,1]],[['cabernet','cab sav'],'Cabernet Sauvignon','red',[4,3,3,4,3,1]],
  [['merlot'],'Merlot','red',[3,4,2,2,3,2]],[['carmenere'],'Carmenère','red',[4,4,2,2,2,1]],[['pinotage'],'Pinotage','red',[4,4,3,3,3,1]],
@@ -810,7 +811,7 @@ function showMatches(){const q=$('fName').value;picked=null;identified=null;gues
   $('matchList').innerHTML=m.length?`<span class="label">Is it one of these? Tap it if so</span>`+m.map(x=>`<button type="button" class="item" data-pick="${esc(x.w.id)}" style="border:none;text-align:left;font:inherit;color:inherit;cursor:pointer;background:var(--sunk)"><div class="with-thumb">${thumb(x.w)}<div><div class="name" style="font-size:15px">${esc(x.w.name)}</div><div class="meta">${esc([TYPES[typeOf(x.w)],x.w.region,x.w.shop==='Other'?'':x.w.shop,gbp(x.w.price)].filter(Boolean).join(' · '))}</div></div></div><span class="tag plain">Pick</span></button>`).join('')+(guessWine(q)?guessHTML(q):'')
     :guessHTML(q);
   clearTimeout(autoId);if(!m.length&&sample&&q.trim().length>=4&&q.trim()!==lastAuto){autoId=setTimeout(()=>{lastAuto=q.trim();identify()},1300)}}
-function guessHTML(q){const g=guessWine(q);
+function guessHTML(q){const g=guessWine(q);const yr=yearOf(q);if(yr&&!$('fVintage').value)$('fVintage').value=yr;
   if(!g)return `<p class="meta" style="margin:0">Not in the app's list, and the name doesn't say the grape or region.${sample?' Looking it up with Claude… or pick':' Pick'} the type and a quick style below.</p>`;
   if(!slidersTouched){$('fType').value=g.type;drawPresets();setSliders(g.a);guessed=g}
   return `<div class="card" style="background:var(--sunk)"><span class="label">Recognised from the name</span><div class="name">${esc(g.label)}</div><div class="meta">${TYPES[g.type]}. I've filled in its usual style below; adjust it if this bottle is different.</div>${sample?'<p class="meta" style="margin:0">Looking up the exact wine with Claude…</p>':''}</div>`}
