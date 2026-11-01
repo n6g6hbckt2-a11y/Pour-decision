@@ -740,7 +740,7 @@ function searchWines(q){const qt=normW(q).split(' ').filter(t=>t.length>1&&!STOP
     return {w,s:sc/qt.length}}).filter(x=>x.s>=0.6).sort((a,b)=>b.s-a.s).slice(0,5)}
 function resetLookup(){picked=null;identified=null;slidersTouched=false;warnedUnknown=false;idCtl?.abort();
   $('matchList').innerHTML='';$('idOut').innerHTML='';$('idStatus').textContent='';$('labelPhoto').value='';
-  $('labelWrap').hidden=!imgOK;$('idBtn').hidden=false;$('styleWrap').hidden=false;$('styleLabel').textContent='Style, if you know it'}
+  $('labelWrap').hidden=false;$('idBtn').hidden=false;$('styleWrap').hidden=false;$('styleLabel').textContent='Style, if you know it'}
 function pickWine(w){picked=w;identified=null;$('fName').value=w.name;$('fType').value=typeOf(w);$('fShop').value=SHOPS.includes(w.shop)?w.shop:'Other';
   $('fPrice').value=w.price??'';const y=yearOf(w.name);if(y)$('fVintage').value=y;w.a.forEach((v,i)=>{$('fs'+i).value=v;$('fo'+i).textContent=v});
   $('styleWrap').hidden=true;$('idOut').innerHTML='';$('idStatus').textContent='';
@@ -755,7 +755,7 @@ $('fSliders').addEventListener('input',()=>{slidersTouched=true});
 $('labelPhoto').addEventListener('change',()=>{if($('labelPhoto').files?.[0]){$('idStatus').textContent='Label photo ready.';identify()}});
 $('idBtn').addEventListener('click',()=>identify());
 async function identify(text){
-  if(!sample){$('idStatus').textContent=typeof getKey==='function'?'Looking up unknown bottles uses Claude. Add your Claude API key on the More tab.':'Looking up unknown bottles needs Claude, which isn\'t available here. Set the style sliders instead.';return}
+  if(!sample){if(typeof needKey==='function'){needKey('idStatus','Looking up unknown bottles uses Claude, so it needs your Claude API key first.');return}$('idStatus').textContent='Looking up unknown bottles needs Claude, which isn\'t available here. Set the style sliders instead.';return}
   const name=(text||$('fName').value).trim(),photo=$('labelPhoto').files?.[0];
   if(!name&&!photo){$('idStatus').textContent='Type the name or take a photo of the label first.';return}
   idCtl?.abort();idCtl=new AbortController();$('idBtn').disabled=true;$('idStatus').textContent='Working out which wine this is…';$('idOut').innerHTML='';
@@ -832,7 +832,7 @@ $('scanPhoto').addEventListener('change',e=>{const f=e.target.files?.[0];$('phot
 $('scanStop').addEventListener('click',()=>scanCtl?.abort());
 function palateText(pid){return Object.keys(TYPES).map(t=>{const P=getP(t,pid);if(!P.n)return `${TYPES[t]}: not known yet`;
   return `${TYPES[t]}: `+dimsFor(t).map(D=>{const d=P.dims[D.i];return d.state==='unknown'?`${D.k} unknown`:`${D.k} ${d.ideal.toFixed(1)} (${d.state})`}).join(', ')}).join('\n')}
-$('scanForm').addEventListener('submit',async e=>{e.preventDefault();if(!sample){$('scanStatus').textContent='Scanning uses Claude. Add your Claude API key on the More tab to turn it on.';return}
+$('scanForm').addEventListener('submit',async e=>{e.preventDefault();if(!sample){needKey('scanStatus','Scanning uses Claude, so it needs your Claude API key first.');return}
   const file=$('scanPhoto').files?.[0], text=$('scanText').value.trim();
   if(!file&&!text){$('scanStatus').textContent='Add a photo or paste the list first.';return}
   const tasteOf=pid=>{const e=Object.entries(R(pid));return `${pname(pid)}. Palate:\n${palateText(pid)}\nLoved: ${e.filter(([,r])=>r.score>0).map(([id])=>byId(id)?.name).filter(Boolean).slice(0,10).join('; ')||'none yet'}. Disliked: ${e.filter(([,r])=>r.score<=0).map(([id])=>byId(id)?.name).filter(Boolean).slice(0,10).join('; ')||'none yet'}.`};
@@ -872,7 +872,7 @@ $('shelfPhoto').addEventListener('change',e=>{const n=e.target.files?.length||0;
   $('shelfLabel').textContent=n?`${n} photo${n===1?'':'s'} ready${n>maxImgs?` (I'll read the first ${maxImgs})`:''}`:'Photograph your rack or a few bottle labels'});
 $('shelfStop').addEventListener('click',()=>shelfCtl?.abort());
 $('shelfForm').addEventListener('submit',async e=>{e.preventDefault();
-  if(!sample||!imgOK){$('shelfStatus').textContent='Reading photos uses Claude. Add your Claude API key on the More tab, or add bottles by hand.';return}
+  if(!sample||!imgOK){needKey('shelfStatus','Reading bottle photos uses Claude, so it needs your Claude API key first.');return}
   const files=Array.from($('shelfPhoto').files||[]).slice(0,maxImgs);if(!files.length){$('shelfStatus').textContent='Choose at least one photo first.';return}
   const prompt=`The attached photo${files.length>1?'s show':' shows'} wine bottles in someone's home wine rack or cellar. Identify every distinct wine whose label you can read, and count how many bottles of each you can see across all photos (don't double-count the same bottle seen in two photos). Today is ${new Date().toDateString()}.
 For each wine give: "name" (producer and wine, as on the label, without the vintage), "type" ("red","white","rose" or "sparkling"), "vintage" (number or null if not visible or non-vintage), "count", "style" as six numbers 1-5 [Body, Fruit, Oak, Tannin, Freshness, Ripeness] (1 = light/savoury/unoaked/silky/soft/dry, 5 = full/jammy/vanilla oak/grippy/crisp/sweet-ripe) from what you know of this wine or its type, "retail" (typical UK price per bottle, or null if unsure), "drinkFrom" and "drinkBy" (years: the window when this wine, at this vintage, will drink best; for a non-vintage wine use this year and next year), "windowNote" (one short plain sentence on when and how to drink it), and "unsure" (true if you had to guess the wine from a partly visible label).
@@ -913,7 +913,7 @@ $('aislePhoto').addEventListener('change',e=>{const n=e.target.files?.length||0;
 $('aisleStop').addEventListener('click',()=>aisleCtl?.abort());
 const normName=s=>String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g,'');
 $('aisleForm').addEventListener('submit',async e=>{e.preventDefault();
-  if(!sample||!imgOK){$('aisleStatus').textContent='Reading shelves uses Claude. Add your Claude API key on the More tab.';return}
+  if(!sample||!imgOK){needKey('aisleStatus','Reading shelf photos uses Claude, so it needs your Claude API key first.');return}
   const files=Array.from($('aislePhoto').files||[]);if(!files.length){$('aisleStatus').textContent='Choose at least one photo first.';return}
   const shop=$('aisleShop').value, per=Math.max(1,maxImgs), batches=[];for(let i=0;i<files.length;i+=per)batches.push(files.slice(i,i+per));
   const prompt=`The attached photos show wine shelves in a ${shop} store in the UK, with shelf-edge price labels. List every distinct wine you can read: reds, whites, rosés and sparkling (skip fortified wines, spirits and boxes). Match each bottle to its price label where you can.
@@ -992,14 +992,17 @@ function makeSample(key){
   call.limits=async()=>({maxPromptBytes:65536,images:{maxCount:5}});
   return call}
 function applySampleUI(){const k=getKey();sample=k?makeSample(k):null;imgOK=!!sample;maxImgs=5;
-  const need='Add your Claude API key on the More tab to turn this on.';
-  for(const id of ['photoWrap','shelfWrap','aisleWrap'])$(id).hidden=!imgOK;
-  for(const id of ['shelfGo','aisleGo'])$(id).hidden=!imgOK;
-  $('scanGo').disabled=false;$('scanTextLabel').textContent=imgOK?'Or paste the list':'Paste the list';
-  $('shelfStatus').textContent=imgOK?'Labels facing the camera work best. You check every bottle before anything is added.':`Reading photos uses Claude. ${need} You can still add bottles by hand below.`;
-  $('aisleStatus').textContent=imgOK?'You check every bottle before anything is added.':`Reading shelves uses Claude. ${need}`;
-  $('scanStatus').textContent=imgOK?'':`Scanning uses Claude. ${need}`;
+  /* photo buttons always show; without a key they explain how to turn photo reading on */
+  for(const id of ['photoWrap','shelfWrap','aisleWrap','shelfGo','aisleGo'])$(id).hidden=false;
+  $('scanGo').disabled=false;$('scanTextLabel').textContent='Or paste the list';
+  if(imgOK){$('shelfStatus').textContent='Labels facing the camera work best. You check every bottle before anything is added.';$('aisleStatus').textContent='You check every bottle before anything is added.';$('scanStatus').textContent=''}
+  else{needKey('shelfStatus','Reading bottle photos uses Claude, so it needs your Claude API key first. You can still add bottles by hand below.');
+    needKey('aisleStatus','Reading shelf photos uses Claude, so it needs your Claude API key first.');
+    needKey('scanStatus','Scanning a photo uses Claude, so it needs your Claude API key first. Pasting works the same way.')}
   $('keyState').textContent=k?`Claude features are on (key ending …${k.slice(-4)}).`:'Claude features are off.';$('keyClear').hidden=!k}
+function needKey(id,msg){const el=$(id);el.innerHTML=`${esc(msg)} <a href="#more">Add your key on the More tab</a>.`}
+for(const [inp,st] of [['shelfPhoto','shelfStatus'],['aislePhoto','aisleStatus'],['scanPhoto','scanStatus'],['labelPhoto','idStatus']])
+  $(inp).addEventListener('change',e=>{if(!sample&&e.target.files?.length){needKey(st,'Got the photo, but reading it uses Claude, so it needs your Claude API key first.')}},true);
 /* ---------- More tab: key, backup, restore ---------- */
 $('keyForm').addEventListener('submit',async e=>{e.preventDefault();const k=$('keyIn').value.trim();
   if(!/^sk-ant-/.test(k)){$('keyMsg').textContent='That doesn\'t look like an Anthropic API key. It starts with sk-ant-.';return}
